@@ -1,0 +1,47 @@
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Library System</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'primary-green': '#A7D9C7',
+              'secondary-blue': '#B7E0F2',
+              'accent-yellow': '#F2D7AE',
+              'soft-pink': '#F4C2C2',
+              'text-dark': '#333333',
+              'text-light': '#F8F8F8',
+              'border-light': '#D1D5DB',
+              'success-green': '#6EE7B7',
+              'error-red': '#FCA5A5',
+            }
+          }
+        }
+      }
+    </script>
+<script type="importmap">
+{
+  "imports": {
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react/": "https://esm.sh/react@^19.2.4/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-gradient-to-br from-secondary-blue to-primary-green min-h-screen flex flex-col font-sans text-text-dark">
+    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <div id="root" class="flex flex-col flex-grow"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>
