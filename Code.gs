@@ -95,41 +95,41 @@ function doGet(e) {
       const lib = ss.getSheetByName(TAB_LIBRARY);
       if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
       const lastRow = lib.getLastRow();
-      let headers: string[] = [];
-      let data: string[][] = [];
+      let headers = [];
+      let data = [];
       if (lastRow > 0) { // Fetch headers even if only header row exists
-        headers = lib.getRange(1, 1, 1, lib.getLastColumn()).getValues()[0] as string[];
+        headers = lib.getRange(1, 1, 1, lib.getLastColumn()).getValues()[0];
         if (lastRow > 1) { // Fetch data only if there are rows beyond the header
-          data = lib.getRange(2, 1, lastRow - 1, lib.getLastColumn()).getDisplayValues() as string[][];
+          data = lib.getRange(2, 1, lastRow - 1, lib.getLastColumn()).getDisplayValues();
         }
       }
-      responseData = { success: true, headers: headers, data: data, message: 'Library data fetched successfully.' } as any;
+      responseData = { success: true, headers: headers, data: data, message: 'Library data fetched successfully.' };
 
     } else if (tabName === TAB_LOG) {
       const log = ss.getSheetByName(TAB_LOG);
       if (!log) throw new Error(`Tab not found: ${TAB_LOG}`);
       const lastRow = log.getLastRow();
-      let headers: string[] = [];
-      let data: string[][] = [];
+      let headers = [];
+      let data = [];
       if (lastRow > 0) { // Fetch headers even if only header row exists
-        headers = log.getRange(1, 1, 1, log.getLastColumn()).getValues()[0] as string[];
+        headers = log.getRange(1, 1, 1, log.getLastColumn()).getValues()[0];
         if (lastRow > 1) { // Fetch data only if there are rows beyond the header
-          data = log.getRange(2, 1, lastRow - 1, log.getLastColumn()).getDisplayValues() as string[][];
+          data = log.getRange(2, 1, lastRow - 1, log.getLastColumn()).getDisplayValues();
         }
       }
-      responseData = { success: true, headers: headers, data: data, message: 'Checkout log fetched successfully.' } as any;
+      responseData = { success: true, headers: headers, data: data, message: 'Checkout log fetched successfully.' };
 
     } else if (tabName === TAB_BORROWERS) { // New logic for borrowers tab
       const borrowersSheet = ss.getSheetByName(TAB_BORROWERS);
       if (!borrowersSheet) throw new Error(`Tab not found: ${TAB_BORROWERS}`);
       const lastRow = borrowersSheet.getLastRow();
-      let names: string[] = [];
+      let names = [];
       // Assuming "Name" is the only header and it's always in row 1
       let headers = ["Name"]; 
       if (lastRow > 1) { // Fetch data only if there are rows beyond the header
-        names = (borrowersSheet.getRange(2, 1, lastRow - 1, 1).getValues() as string[][]).map(row => row[0]);
+        names = borrowersSheet.getRange(2, 1, lastRow - 1, 1).getValues().map(row => row[0]);
       }
-      responseData = { success: true, headers: headers, data: names.map(name => [name]), message: 'Borrowers data fetched successfully.' } as any;
+      responseData = { success: true, headers: headers, data: names.map(name => [name]), message: 'Borrowers data fetched successfully.' };
 
     } else {
       throw new Error("Invalid tab specified.");
@@ -139,7 +139,7 @@ function doGet(e) {
       .setMimeType(ContentService.MimeType.JSON);
     return setCorsHeaders(output);
 
-  } catch (err: any) {
+  } catch (err) {
     const errorOutput = ContentService.createTextOutput(JSON.stringify({ success: false, message: `Error: ${err.message}` }))
       .setMimeType(ContentService.MimeType.JSON);
     return setCorsHeaders(errorOutput);
@@ -172,8 +172,8 @@ function doPost(e) {
       // Check for duplicate borrower name (case-insensitive)
       const lastRow = borrowersSheet.getLastRow();
       if (lastRow > 1) {
-        const existingNames = (borrowersSheet.getRange(2, BORROWER_COL_NAME_IDX + 1, lastRow - 1, 1).getValues() as string[][])
-                               .map(row => String(row[0]).trim().toLowerCase());
+        const existingNames = borrowersSheet.getRange(2, BORROWER_COL_NAME_IDX + 1, lastRow - 1, 1).getValues()
+                   .map(row => String(row[0]).trim().toLowerCase());
         if (existingNames.includes(borrowerName.toLowerCase())) {
           return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: false, message: `Borrower '${borrowerName}' already exists.` })))
             .setMimeType(ContentService.MimeType.JSON);
@@ -210,7 +210,7 @@ function doPost(e) {
 
       const lastBorrowerRow = borrowersSheet.getLastRow();
       let foundBorrowerRow = -1; // 1-indexed sheet row for the borrower
-      const borrowerNames = borrowersSheet.getRange(2, BORROWER_COL_NAME_IDX + 1, lastBorrowerRow - 1, 1).getValues() as string[][];
+      const borrowerNames = borrowersSheet.getRange(2, BORROWER_COL_NAME_IDX + 1, lastBorrowerRow - 1, 1).getValues();
 
       for (let i = 0; i < borrowerNames.length; i++) {
         if (String(borrowerNames[i][0]).trim().toLowerCase() === oldName.toLowerCase()) {
@@ -238,7 +238,7 @@ function doPost(e) {
       // Update borrower name in LIBRARY tab for checked out books
       const lastLibraryRow = lib.getLastRow();
       if (lastLibraryRow > 1) {
-        const libraryData = lib.getRange(2, COL_BORROWER_IDX + 1, lastLibraryRow - 1, 1).getValues() as string[][];
+        const libraryData = lib.getRange(2, COL_BORROWER_IDX + 1, lastLibraryRow - 1, 1).getValues();
         for (let i = 0; i < libraryData.length; i++) {
           if (String(libraryData[i][0]).trim().toLowerCase() === oldName.toLowerCase()) {
             lib.getRange(i + 2, COL_BORROWER_IDX + 1).setValue(newName);
@@ -341,7 +341,7 @@ function doPost(e) {
     })).setMimeType(ContentService.MimeType.JSON);
     return setCorsHeaders(output);
 
-  } catch (err: any) {
+  } catch (err) {
     const errorOutput = ContentService.createTextOutput(JSON.stringify({ success: false, message: `Error: ${err.message}` }))
       .setMimeType(ContentService.MimeType.JSON);
     return setCorsHeaders(errorOutput);

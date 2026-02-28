@@ -23,6 +23,15 @@ export interface LogEntry {
   notes: string;
 }
 
+export interface BrowserProfile {
+  id: string;
+  name: string;
+  settings?: Record<string, any>;
+  bookmarks?: Array<{ title: string; url: string }>;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Borrower {
   name: string;
 }
