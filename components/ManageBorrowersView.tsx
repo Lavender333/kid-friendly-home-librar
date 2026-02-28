@@ -12,6 +12,11 @@ interface ManageBorrowersViewProps {
 }
 
 const ManageBorrowersView: React.FC<ManageBorrowersViewProps> = ({ borrowers, onAddBorrower, onEditBorrower, isLoading, message }) => {
+  const [retrying, setRetrying] = useState(false);
+  const handleRetry = () => {
+    setRetrying(true);
+    window.location.reload(); // Simple retry: reload the page
+  };
   const [newBorrowerName, setNewBorrowerName] = useState<string>('');
   const [editingBorrowerName, setEditingBorrowerName] = useState<string | null>(null); // Name of borrower being edited
   const [currentEditedName, setCurrentEditedName] = useState<string>(''); // Value of the edit input field
@@ -102,7 +107,19 @@ const ManageBorrowersView: React.FC<ManageBorrowersViewProps> = ({ borrowers, on
       <div className="bg-white p-4 rounded-lg shadow-inner mb-6">
         <h3 className="text-xl font-semibold text-text-dark mb-4">Current Borrowers</h3>
         {borrowers.length === 0 && !isLoading ? (
-          <p className="text-center text-gray-500">No borrowers added yet. Add some below!</p>
+          <div className="text-center">
+            <p className="text-gray-500 mb-2">No borrowers loaded. This may be due to a network or backend error.</p>
+            {message?.type === 'error' && (
+              <button
+                onClick={handleRetry}
+                className="bg-accent-yellow text-text-dark px-4 py-2 rounded-lg shadow-md hover:bg-yellow-400 transition-colors duration-200"
+                disabled={retrying}
+              >
+                {retrying ? 'Retrying...' : 'Retry'}
+              </button>
+            )}
+            <p className="text-xs text-gray-400 mt-2">If retrying does not work, check your backend configuration and network connection.</p>
+          </div>
         ) : (
           <ul className="list-none space-y-3">
             {borrowers.map((borrower) => (
