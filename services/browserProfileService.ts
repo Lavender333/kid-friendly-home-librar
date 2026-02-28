@@ -2,6 +2,12 @@ import { BrowserProfile } from '../types';
 
 export class BrowserProfileService {
   private profiles: BrowserProfile[] = [];
+  private storageKey = 'browserProfiles';
+
+  constructor() {
+    const stored = localStorage.getItem(this.storageKey);
+    this.profiles = stored ? JSON.parse(stored) : [];
+  }
 
   getProfiles(): BrowserProfile[] {
     return this.profiles;
@@ -14,6 +20,7 @@ export class BrowserProfileService {
       createdAt: new Date().toISOString(),
     };
     this.profiles.push(newProfile);
+    localStorage.setItem(this.storageKey, JSON.stringify(this.profiles));
     return newProfile;
   }
 
@@ -25,6 +32,7 @@ export class BrowserProfileService {
       ...updates,
       updatedAt: new Date().toISOString(),
     };
+    localStorage.setItem(this.storageKey, JSON.stringify(this.profiles));
     return this.profiles[idx];
   }
 
@@ -32,6 +40,7 @@ export class BrowserProfileService {
     const idx = this.profiles.findIndex(p => p.id === id);
     if (idx === -1) return false;
     this.profiles.splice(idx, 1);
+    localStorage.setItem(this.storageKey, JSON.stringify(this.profiles));
     return true;
   }
 }

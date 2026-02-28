@@ -8,9 +8,10 @@ interface ManageBorrowersViewProps {
   onAddBorrower: (name: string) => Promise<{ success: boolean; message?: string }>;
   onEditBorrower: (oldName: string, newName: string) => Promise<{ success: boolean; message?: string }>; // New prop for editing
   isLoading: boolean;
+  message?: { text: string; type: 'success' | 'error' | '' };
 }
 
-const ManageBorrowersView: React.FC<ManageBorrowersViewProps> = ({ borrowers, onAddBorrower, onEditBorrower, isLoading }) => {
+const ManageBorrowersView: React.FC<ManageBorrowersViewProps> = ({ borrowers, onAddBorrower, onEditBorrower, isLoading, message }) => {
   const [newBorrowerName, setNewBorrowerName] = useState<string>('');
   const [editingBorrowerName, setEditingBorrowerName] = useState<string | null>(null); // Name of borrower being edited
   const [currentEditedName, setCurrentEditedName] = useState<string>(''); // Value of the edit input field
@@ -82,7 +83,19 @@ const ManageBorrowersView: React.FC<ManageBorrowersViewProps> = ({ borrowers, on
 
   return (
     <div className="p-4 bg-secondary-blue rounded-lg shadow-md my-6 max-w-lg mx-auto relative">
+
       <h2 className="text-2xl font-bold text-center mb-6 text-text-dark">Manage Our Borrowers</h2>
+      {message?.text && (
+        <div
+          className={`mb-4 px-4 py-2 rounded text-center font-semibold ${
+            message.type === 'error' ? 'bg-red-100 text-red-700 border border-red-300' :
+            message.type === 'success' ? 'bg-green-100 text-green-700 border border-green-300' :
+            'bg-gray-100 text-gray-700 border border-gray-300'
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
 
       {isLoading && <LoadingSpinner />}
 

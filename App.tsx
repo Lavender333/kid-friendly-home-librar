@@ -196,8 +196,9 @@ const App: React.FC = () => {
               element={<ManageBorrowersView
                 borrowers={borrowersList}
                 onAddBorrower={handleAddNewBorrower}
-                onEditBorrower={handleEditBorrower} // Pass the new prop
+                onEditBorrower={handleEditBorrower}
                 isLoading={isLoading}
+                message={message}
               />}
             />
           </Routes>
