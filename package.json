@@ -1,12 +1,24 @@
 {
-  "name": "kid-friendly-home-librar",
-  "version": "1.0.0",
-  "description": "A kid-friendly home library project.",
-  "main": "index.js",
+  "name": "kid-friendly-home-library",
+  "version": "0.0.0",
+  "private": true,
   "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
     "test": "echo \"No tests specified\" && exit 0"
   },
-  "keywords": [],
-  "author": "Lavender333",
-  "license": "ISC"
+  "dependencies": {
+    "jsbarcode": "^3.11.6",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "gh-pages": "^6.1.1",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
 }
