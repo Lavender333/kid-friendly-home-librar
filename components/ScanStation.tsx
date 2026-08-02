@@ -159,7 +159,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
           <p><strong>Book ID:</strong> {lastReceipt.bookId}</p>
           <p><strong>Borrower:</strong> {lastReceipt.borrower}</p>
           {lastReceipt.action === 'Checkout' && <p><strong>Due:</strong> {lastReceipt.dueDate}</p>}
-          <p><strong>Date:</strong> {lastReceipt.timestamp}</p>
+          <p><strong>Date:</strong> {lastReceipt.timestamp || new Date().toLocaleString()}</p>
           <div className="receipt-rule" />
           <p className="receipt-thanks">Happy reading!</p>
         </section>

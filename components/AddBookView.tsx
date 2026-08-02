@@ -15,6 +15,7 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
   const [book, setBook] = React.useState<Book>(emptyBook);
   const [formMessage, setFormMessage] = React.useState('');
   const barcodeRef = React.useRef<HTMLInputElement>(null);
+  const titleRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => { barcodeRef.current?.focus(); }, []);
 
@@ -54,9 +55,15 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
               <textarea value={book[field]} onChange={e => update(field, e.target.value)} className="w-full rounded-lg border p-3" rows={3} />
             ) : (
               <input
-                ref={field === 'barcode' ? barcodeRef : undefined}
+                ref={field === 'barcode' ? barcodeRef : field === 'title' ? titleRef : undefined}
                 value={book[field]}
                 onChange={e => update(field, e.target.value)}
+                onKeyDown={e => {
+                  if (field === 'barcode' && e.key === 'Enter') {
+                    e.preventDefault();
+                    titleRef.current?.focus();
+                  }
+                }}
                 required={required}
                 inputMode={field === 'barcode' ? 'none' : undefined}
                 className="w-full rounded-lg border p-3"
