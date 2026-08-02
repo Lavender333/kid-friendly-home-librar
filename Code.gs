@@ -290,6 +290,7 @@ function handleMutation(request) {
     // Existing logic for scanning books
     const scannedId = String(request.bookId || '').trim();
     const borrower = String(request.borrower || '').trim();
+    const requestedOperation = String(request.operation || '').trim().toLowerCase();
     const dueDays = (request.dueDays && Number(request.dueDays) > 0) ? Number(request.dueDays) : 14;
 
     if (!scannedId) {
@@ -297,12 +298,6 @@ function handleMutation(request) {
         .setMimeType(ContentService.MimeType.JSON);
       return setCorsHeaders(output);
     }
-    if (!borrower) {
-      const output = ContentService.createTextOutput(JSON.stringify({ success: false, message: "Borrower is required." }))
-        .setMimeType(ContentService.MimeType.JSON);
-      return setCorsHeaders(output);
-    }
-
     const lib = ss.getSheetByName(TAB_LIBRARY);
     const log = ss.getSheetByName(TAB_LOG);
 
@@ -338,6 +333,20 @@ function handleMutation(request) {
     const title = String(lib.getRange(foundRow, COL_TITLE_IDX + 1).getValue()).trim();
     const statusCell = lib.getRange(foundRow, COL_STATUS_IDX + 1);
     const currentStatus = String(statusCell.getValue()).trim() || "On Shelf";
+    const isOnShelf = currentStatus.toLowerCase() === "on shelf";
+
+    if (requestedOperation === "checkout" && !isOnShelf) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, message: `'${title}' is already checked out.` }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    if (requestedOperation === "return" && isOnShelf) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, message: `'${title}' is already checked in.` }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+    if (isOnShelf && !borrower) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Borrower is required for checkout." }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
 
     const borrowerCell = lib.getRange(foundRow, COL_BORROWER_IDX + 1);
     const checkoutDateCell = lib.getRange(foundRow, COL_CHECKOUT_DATE_IDX + 1);
@@ -348,7 +357,7 @@ function handleMutation(request) {
     let newStatus = "";
     let transactionBorrower = borrower;
 
-    if (currentStatus.toLowerCase() === "on shelf") {
+    if (isOnShelf) {
       action = "Checkout";
       newStatus = "Checked Out";
       statusCell.setValue(newStatus);
