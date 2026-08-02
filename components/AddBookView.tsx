@@ -1,5 +1,6 @@
 import React from 'react';
 import { Book } from '../types';
+import Barcode from './Barcode';
 
 interface AddBookViewProps {
   onAddBook: (book: Book) => Promise<{ success: boolean; message?: string }>;
@@ -11,72 +12,141 @@ const emptyBook: Book = {
   genre: '', status: 'On Shelf', borrower: '', checkoutDate: '', dueDate: '', notes: '',
 };
 
+const createLibraryId = () => `ML-${Date.now().toString(36).toUpperCase()}`;
+
 const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
   const [book, setBook] = React.useState<Book>(emptyBook);
+  const [savedBook, setSavedBook] = React.useState<Book | null>(null);
   const [formMessage, setFormMessage] = React.useState('');
-  const barcodeRef = React.useRef<HTMLInputElement>(null);
   const titleRef = React.useRef<HTMLInputElement>(null);
 
-  React.useEffect(() => { barcodeRef.current?.focus(); }, []);
+  React.useEffect(() => { titleRef.current?.focus(); }, []);
 
   const update = (field: keyof Book, value: string) => {
-    setBook(current => {
-      const next = { ...current, [field]: value };
-      if (field === 'barcode' && (!current.bookId || current.bookId === current.barcode)) next.bookId = value;
-      return next;
-    });
+    setBook(current => ({ ...current, [field]: value }));
   };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const result = await onAddBook(book);
+    const existingCode = book.barcode.trim();
+    const bookId = book.bookId.trim() || existingCode || createLibraryId();
+    const bookToSave = { ...book, bookId, barcode: existingCode || bookId };
+    const result = await onAddBook(bookToSave);
     setFormMessage(result.message || '');
     if (result.success) {
+      setSavedBook(bookToSave);
       setBook(emptyBook);
-      requestAnimationFrame(() => barcodeRef.current?.focus());
+      requestAnimationFrame(() => titleRef.current?.focus());
     }
   };
 
-  const fields: Array<[keyof Book, string, boolean]> = [
-    ['barcode', 'Scan Existing Barcode', true], ['bookId', 'Book ID', true], ['title', 'Title', true],
-    ['author', 'Author', false], ['publisher', 'Publisher', false], ['publicationYear', 'Publication Year', false],
-    ['genre', 'Genre', false], ['notes', 'Notes', false],
-  ];
-
   return (
     <div className="mx-auto my-6 max-w-2xl rounded-xl bg-secondary-blue p-5 shadow-md">
-      <h2 className="mb-2 text-center text-2xl font-bold">Save New Book</h2>
-      <p className="mb-5 text-center text-sm">Scan the ISBN on the back. It will also become the Book ID.</p>
-      <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
-        {fields.map(([field, label, required]) => (
-          <label key={field} className={field === 'notes' ? 'md:col-span-2' : ''}>
-            <span className="mb-1 block font-semibold">{label}{required ? ' *' : ''}</span>
-            {field === 'notes' ? (
-              <textarea value={book[field]} onChange={e => update(field, e.target.value)} className="w-full rounded-lg border p-3" rows={3} />
-            ) : (
+      <h2 className="mb-2 text-center text-2xl font-bold">Add a Book</h2>
+      <p className="mb-5 text-center text-sm">No barcode needed. Enter the title and the library will create one for you.</p>
+
+      <form onSubmit={submit} className="space-y-4">
+        <label className="block">
+          <span className="mb-1 block font-semibold">Book Title *</span>
+          <input
+            ref={titleRef}
+            value={book.title}
+            onChange={event => update('title', event.target.value)}
+            required
+            autoComplete="off"
+            className="w-full rounded-lg border p-4 text-lg"
+            placeholder="Enter the book title"
+          />
+        </label>
+
+        <label className="block">
+          <span className="mb-1 block font-semibold">Author <span className="font-normal">(optional)</span></span>
+          <input
+            value={book.author}
+            onChange={event => update('author', event.target.value)}
+            autoComplete="off"
+            className="w-full rounded-lg border p-3"
+            placeholder="Author's name"
+          />
+        </label>
+
+        <details className="rounded-lg bg-white/70 p-4">
+          <summary className="cursor-pointer font-semibold">Optional details or existing barcode</summary>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label>
+              <span className="mb-1 block font-semibold">Existing ISBN/barcode</span>
               <input
-                ref={field === 'barcode' ? barcodeRef : field === 'title' ? titleRef : undefined}
-                value={book[field]}
-                onChange={e => update(field, e.target.value)}
-                onKeyDown={e => {
-                  if (field === 'barcode' && e.key === 'Enter') {
-                    e.preventDefault();
+                value={book.barcode}
+                onChange={event => update('barcode', event.target.value)}
+                onKeyDown={event => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault();
                     titleRef.current?.focus();
                   }
                 }}
-                required={required}
-                inputMode={field === 'barcode' ? 'none' : undefined}
-                className="w-full rounded-lg border p-3"
+                inputMode="none"
                 autoComplete="off"
+                className="w-full rounded-lg border p-3"
+                placeholder="Scan only if available"
               />
-            )}
-          </label>
-        ))}
-        <button disabled={isLoading} className="rounded-lg bg-primary-green p-4 text-lg font-bold text-white md:col-span-2">
-          {isLoading ? 'Saving…' : 'Save Book'}
+            </label>
+            <label>
+              <span className="mb-1 block font-semibold">Custom Book ID</span>
+              <input
+                value={book.bookId}
+                onChange={event => update('bookId', event.target.value)}
+                autoComplete="off"
+                className="w-full rounded-lg border p-3"
+                placeholder="Created automatically if blank"
+              />
+            </label>
+            <label>
+              <span className="mb-1 block font-semibold">Publisher</span>
+              <input value={book.publisher} onChange={event => update('publisher', event.target.value)} className="w-full rounded-lg border p-3" />
+            </label>
+            <label>
+              <span className="mb-1 block font-semibold">Publication Year</span>
+              <input value={book.publicationYear} onChange={event => update('publicationYear', event.target.value)} className="w-full rounded-lg border p-3" />
+            </label>
+            <label>
+              <span className="mb-1 block font-semibold">Genre</span>
+              <input value={book.genre} onChange={event => update('genre', event.target.value)} className="w-full rounded-lg border p-3" />
+            </label>
+            <label className="md:col-span-2">
+              <span className="mb-1 block font-semibold">Notes</span>
+              <textarea value={book.notes} onChange={event => update('notes', event.target.value)} className="w-full rounded-lg border p-3" rows={3} />
+            </label>
+          </div>
+        </details>
+
+        <button disabled={isLoading} className="w-full rounded-lg bg-primary-green p-4 text-lg font-bold text-white disabled:opacity-60">
+          {isLoading ? 'Saving…' : 'Save Book & Create Barcode'}
         </button>
       </form>
+
       {formMessage && <p className="mt-4 text-center font-semibold">{formMessage}</p>}
+
+      {savedBook && (
+        <div className="mt-5 rounded-xl bg-white p-5 text-center shadow">
+          <p className="text-lg font-bold">Book saved!</p>
+          <p className="mb-3">Attach this label to <strong>{savedBook.title}</strong>.</p>
+          <Barcode value={savedBook.barcode} className="mx-auto max-w-full" />
+          <button type="button" onClick={() => window.print()} className="mt-3 rounded-lg bg-accent-yellow px-5 py-3 font-bold">
+            Print 4×6 Book Label
+          </button>
+        </div>
+      )}
+
+      {savedBook && (
+        <section className="thermal-receipt" aria-label="Thermal book label">
+          <h1>Mariah's Library</h1>
+          <div className="receipt-rule" />
+          <h2>{savedBook.title}</h2>
+          {savedBook.author && <p style={{ textAlign: 'center' }}>by {savedBook.author}</p>}
+          <Barcode value={savedBook.barcode} className="mx-auto" height={95} width={3} />
+          <p className="receipt-thanks">Scan to check out or return</p>
+        </section>
+      )}
     </div>
   );
 };
