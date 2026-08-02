@@ -97,6 +97,18 @@ export class SheetService {
     }
   }
 
+  async updateBookStatus(bookId: string, status: string): Promise<{ success: boolean; message?: string }> {
+    if (!this.webAppUrl) {
+      return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
+    }
+    try {
+      return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'updateBookStatus', bookId, status });
+    } catch (error) {
+      console.error('Error updating book status:', error);
+      return { success: false, message: `Failed to update status: ${(error as Error).message}` };
+    }
+  }
+
   async addBorrower(name: string): Promise<{ success: boolean; message?: string }> {
     // Fix: Remove the specific string literal comparison for webAppUrl.
     // The App.tsx component now handles the initial URL configuration check.

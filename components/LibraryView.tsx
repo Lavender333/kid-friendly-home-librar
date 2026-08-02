@@ -7,9 +7,10 @@ import Barcode from './Barcode';
 interface LibraryViewProps {
   books: Book[];
   isLoading: boolean;
+  onUpdateStatus: (bookId: string, status: string) => Promise<{ success: boolean; message?: string }>;
 }
 
-const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading }) => {
+const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateStatus }) => {
   if (isLoading && books.length === 0) {
     return <LoadingSpinner />;
   }
@@ -73,9 +74,19 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading }) => {
                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 md:px-6">
                   {book.publicationYear || '-'}
                 </td>
-                <td className={`px-3 py-4 whitespace-nowrap text-sm font-semibold md:px-6
-                  ${book.status === 'On Shelf' ? 'text-primary-green' : 'text-soft-pink'}`}>
-                  {book.status}
+                <td className="px-3 py-4 whitespace-nowrap text-sm font-semibold md:px-6">
+                  <select
+                    value={book.status || 'On Shelf'}
+                    onChange={event => onUpdateStatus(book.bookId, event.target.value)}
+                    disabled={isLoading}
+                    aria-label={`Status for ${book.title}`}
+                    className="min-h-11 rounded-lg border border-border-light bg-white px-3 py-2 text-text-dark"
+                  >
+                    <option>On Shelf</option>
+                    <option>Checked Out</option>
+                    <option>Missing</option>
+                    <option>Repair</option>
+                  </select>
                 </td>
                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 md:px-6">
                   {book.borrower || '-'}
