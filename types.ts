@@ -50,4 +50,6 @@ export interface ScanResponse {
   title?: string;
   borrower?: string;
   newStatus?: string;
+  dueDate?: string;
+  timestamp?: string;
 }

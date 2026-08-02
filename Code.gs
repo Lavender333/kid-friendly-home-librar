@@ -150,6 +150,39 @@ function doPost(e) {
     const request = JSON.parse(e.postData.contents);
     const ss = getLibrarySpreadsheet();
 
+    if (request.action === 'addBook') {
+      const book = request.book || {};
+      const bookId = String(book.bookId || '').trim();
+      const barcode = String(book.barcode || bookId).trim();
+      const title = String(book.title || '').trim();
+      if (!bookId || !title) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Book ID and title are required.' }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const lib = ss.getSheetByName(TAB_LIBRARY);
+      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
+      const lastRow = lib.getLastRow();
+      if (lastRow > 1) {
+        const existing = lib.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
+        const duplicate = existing.some(row =>
+          String(row[0]).trim() === barcode || String(row[1]).trim() === bookId
+        );
+        if (duplicate) {
+          return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Book ID or barcode already exists: ${bookId}` }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+
+      lib.appendRow([
+        barcode, bookId, title, String(book.author || '').trim(),
+        String(book.publisher || '').trim(), String(book.publicationYear || '').trim(),
+        String(book.genre || '').trim(), 'On Shelf', '', '', '', String(book.notes || '').trim()
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Saved '${title}'.` }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
     // Handle adding a new borrower
     if (request.action === 'addBorrower') {
       const borrowerName = String(request.borrowerName || '').trim();
@@ -329,6 +362,8 @@ function doPost(e) {
       title: title,
       borrower: borrower,
       newStatus: newStatus,
+      dueDate: action === "Checkout" ? Utilities.formatDate(dueDateCell.getValue(), Session.getScriptTimeZone(), "MMM d, yyyy") : "",
+      timestamp: Utilities.formatDate(now, Session.getScriptTimeZone(), "MMM d, yyyy h:mm a"),
       message: `${action}: ${scannedId} (${title}) by ${borrower}`
     })).setMimeType(ContentService.MimeType.JSON);
     return setCorsHeaders(output);

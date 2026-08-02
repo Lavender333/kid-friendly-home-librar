@@ -74,6 +74,23 @@ export class SheetService {
     return this.fetchData<Borrower>('BORROWERS');
   }
 
+  async addBook(book: Book): Promise<{ success: boolean; message?: string }> {
+    if (!this.webAppUrl) {
+      return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
+    }
+    try {
+      const response = await fetch(this.webAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ action: 'addBook', book }),
+      });
+      return await this.readJson<{ success: boolean; message?: string }>(response);
+    } catch (error) {
+      console.error('Error adding book:', error);
+      return { success: false, message: `Failed to add book: ${(error as Error).message}` };
+    }
+  }
+
   async addBorrower(name: string): Promise<{ success: boolean; message?: string }> {
     // Fix: Remove the specific string literal comparison for webAppUrl.
     // The App.tsx component now handles the initial URL configuration check.

@@ -7,6 +7,7 @@ import ScanStation from './components/ScanStation';
 import LibraryView from './components/LibraryView';
 import CheckoutLogView from './components/CheckoutLogView';
 import ManageBorrowersView from './components/ManageBorrowersView';
+import AddBookView from './components/AddBookView';
 import { SheetService } from './services/googleSheetService';
 import { Book, LogEntry, Borrower } from './types';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -108,6 +109,19 @@ const App: React.FC = () => {
     }
   }, [sheetService, fetchLibraryData, fetchCheckoutLogData, checkWebAppUrl]);
 
+  const handleAddBook = React.useCallback(async (book: Book) => {
+    if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
+    setIsLoading(true);
+    try {
+      const response = await sheetService.addBook(book);
+      setMessage({ text: response.message || (response.success ? 'Book saved.' : 'Failed to save book.'), type: response.success ? 'success' : 'error' });
+      if (response.success) fetchLibraryData();
+      return response;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sheetService, fetchLibraryData, checkWebAppUrl]);
+
   const handleAddNewBorrower = React.useCallback(async (name: string) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
     setIsLoading(true);
@@ -189,6 +203,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<ScanStation onScan={handleScan} borrowers={borrowerNames} />} />
             <Route path="/library" element={<LibraryView books={libraryData} isLoading={isLoading} />} />
+            <Route path="/add-book" element={<AddBookView onAddBook={handleAddBook} isLoading={isLoading} />} />
             <Route path="/checkout-log" element={<CheckoutLogView logEntries={logData} isLoading={isLoading} />} />
             <Route
               path="/manage-borrowers"
