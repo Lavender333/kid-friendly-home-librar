@@ -100,7 +100,8 @@ function doGet(e) {
       if (lastRow > 0) { // Fetch headers even if only header row exists
         headers = lib.getRange(1, 1, 1, lib.getLastColumn()).getValues()[0];
         if (lastRow > 1) { // Fetch data only if there are rows beyond the header
-          data = lib.getRange(2, 1, lastRow - 1, lib.getLastColumn()).getDisplayValues();
+          data = lib.getRange(2, 1, lastRow - 1, lib.getLastColumn()).getDisplayValues()
+            .filter(row => String(row[COL_BOOK_ID_IDX]).trim() !== "");
         }
       }
       responseData = { success: true, headers: headers, data: data, message: 'Library data fetched successfully.' };
@@ -315,11 +316,14 @@ function handleMutation(request) {
       return setCorsHeaders(output);
     }
 
-    // Find matching Book ID in LIBRARY column B (COL_BOOK_ID_IDX + 1 for 1-indexed column)
-    const ids = lib.getRange(2, COL_BOOK_ID_IDX + 1, lastRow - 1, 1).getValues();
+    // Match either the publisher barcode in column A or the internal Book ID in
+    // column B. This lets the NADAMOO scan the barcode already on the book.
+    const identifiers = lib.getRange(2, COL_BARCODE_IDX + 1, lastRow - 1, 2).getDisplayValues();
     let foundRow = -1; // 1-indexed sheet row where the book is found
-    for (let i = 0; i < ids.length; i++) {
-      if (String(ids[i][0]).trim() === scannedId) {
+    for (let i = 0; i < identifiers.length; i++) {
+      const barcode = String(identifiers[i][0]).trim();
+      const bookId = String(identifiers[i][1]).trim();
+      if (barcode === scannedId || bookId === scannedId) {
         foundRow = i + 2; // +2 because range starts at row 2 (header + 1 for 0-indexed array)
         break;
       }
@@ -342,6 +346,7 @@ function handleMutation(request) {
     const now = new Date();
     let action = "";
     let newStatus = "";
+    let transactionBorrower = borrower;
 
     if (currentStatus.toLowerCase() === "on shelf") {
       action = "Checkout";
@@ -356,6 +361,7 @@ function handleMutation(request) {
     } else {
       action = "Return";
       newStatus = "On Shelf";
+      transactionBorrower = String(borrowerCell.getValue()).trim() || borrower;
       statusCell.setValue(newStatus);
       borrowerCell.clearContent();
       checkoutDateCell.clearContent();
@@ -364,18 +370,19 @@ function handleMutation(request) {
 
     // Write to CHECKOUT LOG
     // A Timestamp | B Book ID | C Title | D Borrower | E Action | F Notes
-    log.appendRow([now, scannedId, title, borrower, action, ""]);
+    const canonicalBookId = String(lib.getRange(foundRow, COL_BOOK_ID_IDX + 1).getDisplayValue()).trim();
+    log.appendRow([now, canonicalBookId, title, transactionBorrower, action, ""]);
 
     const output = ContentService.createTextOutput(JSON.stringify({
       success: true,
       action: action,
-      bookId: scannedId,
+      bookId: canonicalBookId,
       title: title,
-      borrower: borrower,
+      borrower: transactionBorrower,
       newStatus: newStatus,
       dueDate: action === "Checkout" ? Utilities.formatDate(dueDateCell.getValue(), Session.getScriptTimeZone(), "MMM d, yyyy") : "",
       timestamp: Utilities.formatDate(now, Session.getScriptTimeZone(), "MMM d, yyyy h:mm a"),
-      message: `${action}: ${scannedId} (${title}) by ${borrower}`
+      message: `${action}: ${canonicalBookId} (${title}) by ${transactionBorrower}`
     })).setMimeType(ContentService.MimeType.JSON);
     return setCorsHeaders(output);
 
