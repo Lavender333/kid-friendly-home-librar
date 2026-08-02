@@ -12,6 +12,12 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   const [dueDays, setDueDays] = useState<number>(14);
   const bookIdInputRef = useRef<HTMLInputElement>(null);
 
+  const focusScannerInput = React.useCallback(() => {
+    // preventScroll avoids Safari jumping the page when a Bluetooth scanner
+    // reconnects or the user returns to the app.
+    bookIdInputRef.current?.focus({ preventScroll: true });
+  }, []);
+
   useEffect(() => {
     // Set default borrower if the list changes and the current selected is no longer valid
     if (borrowers.length > 0 && !borrowers.includes(selectedBorrower)) {
@@ -20,10 +26,22 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
       setSelectedBorrower(''); // Clear if no borrowers are available
     }
 
-    if (bookIdInputRef.current) {
-      bookIdInputRef.current.focus();
-    }
-  }, [borrowers, selectedBorrower]); // Depend on borrowers to update default selection
+    focusScannerInput();
+  }, [borrowers, selectedBorrower, focusScannerInput]);
+
+  useEffect(() => {
+    const handleWindowFocus = () => focusScannerInput();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') focusScannerInput();
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [focusScannerInput]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,9 +58,9 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
     if (result.success) {
       setBookId(''); // Clear for next scan
     }
-    if (bookIdInputRef.current) {
-      bookIdInputRef.current.focus();
-    }
+    // Refocus after React applies the cleared value so the NADAMOO scanner can
+    // immediately send the next barcode and its Enter suffix.
+    requestAnimationFrame(focusScannerInput);
   };
 
   return (
@@ -100,6 +118,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
             className="w-full p-4 border-2 border-primary-green rounded-lg shadow-lg text-2xl text-center font-mono placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-primary-green focus:border-transparent transition-all duration-300"
             autoComplete="off"
             autoCapitalize="off"
+            inputMode="none"
             spellCheck="false"
             aria-label="Book ID to scan"
           />

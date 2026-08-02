@@ -5,7 +5,23 @@ export class SheetService {
   private webAppUrl: string;
 
   constructor(webAppUrl: string) {
-    this.webAppUrl = webAppUrl;
+    this.webAppUrl = webAppUrl.trim();
+  }
+
+  private async readJson<T>(response: Response): Promise<T> {
+    const body = await response.text();
+    if (!response.ok) throw new Error(`Backend returned HTTP ${response.status}.`);
+    try {
+      return JSON.parse(body) as T;
+    } catch {
+      if (body.includes('Script function not found: doGet')) {
+        throw new Error('The Google Apps Script deployment is outdated: deploy Code.gs as a Web app, then use its /exec URL.');
+      }
+      if (body.includes('Google Apps Script') || body.trim().startsWith('<!DOCTYPE html>')) {
+        throw new Error('The Google Apps Script URL is not a working public Web app deployment. Redeploy it with access set to Anyone.');
+      }
+      throw new Error('The backend returned an invalid response. Verify the Apps Script deployment URL and permissions.');
+    }
   }
 
   private async fetchData<T>(tab: string): Promise<SheetResponse<T>> {
@@ -16,11 +32,7 @@ export class SheetService {
     }
     try {
       const response = await fetch(`${this.webAppUrl}?tab=${tab}`);
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! Status: ${response.status}, Details: ${errorText}`);
-      }
-      const jsonResponse = await response.json();
+      const jsonResponse = await this.readJson<{ success: boolean; headers?: string[]; data?: string[][]; message?: string }>(response);
       if (jsonResponse.success) {
         // Map data from array of arrays to array of objects
         const headers: string[] = jsonResponse.headers || [];
@@ -72,17 +84,12 @@ export class SheetService {
       const response = await fetch(this.webAppUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action: 'addBorrower', borrowerName: name }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! Status: ${response.status}, Details: ${errorText}`);
-      }
-
-      const jsonResponse: { success: boolean; message?: string } = await response.json();
+      const jsonResponse = await this.readJson<{ success: boolean; message?: string }>(response);
       return jsonResponse;
 
     } catch (error) {
@@ -99,17 +106,12 @@ export class SheetService {
       const response = await fetch(this.webAppUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ action: 'editBorrower', oldName, newName }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! Status: ${response.status}, Details: ${errorText}`);
-      }
-
-      const jsonResponse: { success: boolean; message?: string } = await response.json();
+      const jsonResponse = await this.readJson<{ success: boolean; message?: string }>(response);
       return jsonResponse;
 
     } catch (error) {
@@ -128,17 +130,12 @@ export class SheetService {
       const response = await fetch(this.webAppUrl, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain;charset=utf-8',
         },
         body: JSON.stringify({ bookId, borrower, dueDays }),
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! Status: ${response.status}, Details: ${errorText}`);
-      }
-
-      const jsonResponse: ScanResponse = await response.json();
+      const jsonResponse = await this.readJson<ScanResponse>(response);
       return jsonResponse;
 
     } catch (error) {
