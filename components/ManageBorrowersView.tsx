@@ -123,7 +123,7 @@ const ManageBorrowersView: React.FC<ManageBorrowersViewProps> = ({ borrowers, on
         ) : (
           <ul className="list-none space-y-3">
             {borrowers.map((borrower) => (
-              <li key={borrower.name} className="flex items-center justify-between group">
+              <li key={borrower.name} className="flex items-center justify-between gap-3 rounded-lg border border-gray-100 p-2">
                 {editingBorrowerName === borrower.name ? (
                   // Edit mode
                   <div className="flex-1 flex flex-col sm:flex-row sm:items-center space-y-2 sm:space-y-0 sm:space-x-2">
@@ -165,7 +165,7 @@ const ManageBorrowersView: React.FC<ManageBorrowersViewProps> = ({ borrowers, on
                     <button
                       type="button"
                       onClick={() => startEditing(borrower)}
-                      className="ml-4 bg-accent-yellow text-text-dark px-3 py-1 rounded-lg shadow-sm hover:bg-yellow-400 transition-colors duration-200 text-sm opacity-0 group-hover:opacity-100 focus-within:opacity-100"
+                      className="min-h-11 min-w-20 touch-manipulation rounded-lg bg-accent-yellow px-4 py-2 text-base font-semibold text-text-dark shadow-sm transition-colors duration-200 hover:bg-yellow-400 focus:outline-none focus:ring-4 focus:ring-accent-yellow focus:ring-opacity-75"
                       aria-label={`Edit ${borrower.name}`}
                       disabled={isLoading}
                     >
