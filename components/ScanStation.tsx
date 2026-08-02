@@ -1,8 +1,9 @@
 
 import React, { useState, useRef, useEffect } from 'react';
+import { ScanResponse } from '../types';
 
 interface ScanStationProps {
-  onScan: (bookId: string, borrower: string, dueDays: number) => Promise<{ success: boolean; message?: string }>;
+  onScan: (bookId: string, borrower: string, dueDays: number) => Promise<ScanResponse>;
   borrowers: string[]; // This will now receive the mapped string array of borrower names
 }
 
@@ -10,6 +11,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   const [bookId, setBookId] = useState<string>('');
   const [selectedBorrower, setSelectedBorrower] = useState<string>(borrowers[0] || '');
   const [dueDays, setDueDays] = useState<number>(14);
+  const [lastReceipt, setLastReceipt] = useState<ScanResponse | null>(null);
   const bookIdInputRef = useRef<HTMLInputElement>(null);
 
   const focusScannerInput = React.useCallback(() => {
@@ -57,6 +59,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
     const result = await onScan(bookId.trim(), selectedBorrower, dueDays);
     if (result.success) {
       setBookId(''); // Clear for next scan
+      setLastReceipt(result);
     }
     // Refocus after React applies the cleared value so the NADAMOO scanner can
     // immediately send the next barcode and its Enter suffix.
@@ -133,6 +136,34 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
           Process Scan
         </button>
       </form>
+      {lastReceipt?.success && (
+        <div className="mt-6 rounded-xl border-2 border-primary-green bg-white p-4 text-center">
+          <p className="text-xl font-bold">{lastReceipt.action} complete!</p>
+          <p>{lastReceipt.title}</p>
+          <p className="font-mono">{lastReceipt.bookId}</p>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="mt-3 w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white"
+          >
+            Print 4×6 Receipt
+          </button>
+        </div>
+      )}
+      {lastReceipt?.success && (
+        <section className="thermal-receipt" aria-label="Thermal receipt">
+          <h1>Mariahs Library</h1>
+          <div className="receipt-rule" />
+          <h2>{lastReceipt.action} Receipt</h2>
+          <p><strong>Book:</strong> {lastReceipt.title}</p>
+          <p><strong>Book ID:</strong> {lastReceipt.bookId}</p>
+          <p><strong>Borrower:</strong> {lastReceipt.borrower}</p>
+          {lastReceipt.action === 'Checkout' && <p><strong>Due:</strong> {lastReceipt.dueDate}</p>}
+          <p><strong>Date:</strong> {lastReceipt.timestamp}</p>
+          <div className="receipt-rule" />
+          <p className="receipt-thanks">Happy reading!</p>
+        </section>
+      )}
     </div>
   );
 };

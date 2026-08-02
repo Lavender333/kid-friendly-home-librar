@@ -37,6 +37,33 @@
   }
 }
 </script>
+<style>
+  .thermal-receipt { display: none; }
+  @media print {
+    @page { size: 4in 6in; margin: 0; }
+    body { background: white !important; }
+    body * { visibility: hidden !important; }
+    .thermal-receipt, .thermal-receipt * { visibility: visible !important; }
+    .thermal-receipt {
+      display: block !important;
+      position: absolute;
+      inset: 0;
+      box-sizing: border-box;
+      width: 4in;
+      min-height: 6in;
+      padding: .35in;
+      color: #000;
+      background: #fff;
+      font-family: Arial, sans-serif;
+      font-size: 15pt;
+      line-height: 1.35;
+    }
+    .thermal-receipt h1 { margin: 0; text-align: center; font-size: 25pt; }
+    .thermal-receipt h2 { text-align: center; font-size: 20pt; }
+    .receipt-rule { margin: .2in 0; border-top: 3px solid #000; }
+    .receipt-thanks { margin-top: .35in; text-align: center; font-size: 18pt; font-weight: bold; }
+  }
+</style>
 </head>
 <body class="bg-gradient-to-br from-secondary-blue to-primary-green min-h-screen flex flex-col font-sans text-text-dark">
     <noscript>You need to enable JavaScript to run this app.</noscript>

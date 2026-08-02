@@ -28,12 +28,15 @@ const Navigation: React.FC<NavigationProps> = ({ navigate }) => {
       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`;
 
   return (
-    <nav className="flex justify-around bg-soft-pink p-2 rounded-xl shadow-inner mt-4 md:mt-6 sticky top-20 z-10">
+    <nav className="flex flex-wrap justify-around gap-1 bg-soft-pink p-2 rounded-xl shadow-inner mt-4 md:mt-6 sticky top-20 z-10">
       <button onClick={() => handleNavClick('/')} className={getTabClasses('/')}>
         Scan Station
       </button>
       <button onClick={() => handleNavClick('/library')} className={getTabClasses('/library')}>
         Library
+      </button>
+      <button onClick={() => handleNavClick('/add-book')} className={getTabClasses('/add-book')}>
+        Add Book
       </button>
       <button onClick={() => handleNavClick('/checkout-log')} className={getTabClasses('/checkout-log')}>
         Checkout Log
