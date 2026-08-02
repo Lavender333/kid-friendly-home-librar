@@ -120,6 +120,23 @@ const App: React.FC = () => {
     }
   }, [sheetService, checkWebAppUrl]);
 
+  const handleUpdateBookStatus = React.useCallback(async (bookId: string, status: string) => {
+    if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
+    setIsLoading(true);
+    try {
+      const response = await sheetService.updateBookStatus(bookId, status);
+      setMessage({ text: response.message || (response.success ? 'Status updated.' : 'Status update failed.'), type: response.success ? 'success' : 'error' });
+      if (response.success) {
+        setLibraryData(current => current.map(book => book.bookId === bookId
+          ? { ...book, status, borrower: status === 'Checked Out' ? book.borrower : '', checkoutDate: status === 'Checked Out' ? book.checkoutDate : '', dueDate: status === 'Checked Out' ? book.dueDate : '' }
+          : book));
+      }
+      return response;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sheetService, checkWebAppUrl]);
+
   const handleAddNewBorrower = React.useCallback(async (name: string) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
     setIsLoading(true);
@@ -202,7 +219,7 @@ const App: React.FC = () => {
         <div className="mt-6">
           <Routes>
             <Route path="/" element={<ScanStation onScan={handleScan} borrowers={borrowerNames} />} />
-            <Route path="/library" element={<LibraryView books={libraryData} isLoading={isLoading} />} />
+            <Route path="/library" element={<LibraryView books={libraryData} isLoading={isLoading} onUpdateStatus={handleUpdateBookStatus} />} />
             <Route path="/add-book" element={<AddBookView onAddBook={handleAddBook} isLoading={isLoading} />} />
             <Route path="/checkout-log" element={<CheckoutLogView logEntries={logData} isLoading={isLoading} />} />
             <Route
