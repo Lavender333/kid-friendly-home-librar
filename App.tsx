@@ -87,11 +87,11 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetService, checkWebAppUrl]);
 
-  const handleScan = React.useCallback(async (bookId: string, borrower: string, dueDays: number) => {
+  const handleScan = React.useCallback(async (bookId: string, borrower: string, dueDays: number, operation: 'checkout' | 'return') => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
     setIsLoading(true);
     try {
-      const response = await sheetService.scanBook(bookId, borrower, dueDays);
+      const response = await sheetService.scanBook(bookId, borrower, dueDays, operation);
       if (response.success) {
         setMessage({ text: `${response.action}: ${response.bookId} (${response.title}) by ${response.borrower}`, type: 'success' });
         fetchLibraryData(); // Refresh library data

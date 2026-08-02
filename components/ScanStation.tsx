@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ScanResponse } from '../types';
 
 interface ScanStationProps {
-  onScan: (bookId: string, borrower: string, dueDays: number) => Promise<ScanResponse>;
+  onScan: (bookId: string, borrower: string, dueDays: number, operation: 'checkout' | 'return') => Promise<ScanResponse>;
   borrowers: string[]; // This will now receive the mapped string array of borrower names
 }
 
@@ -11,6 +11,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   const [bookId, setBookId] = useState<string>('');
   const [selectedBorrower, setSelectedBorrower] = useState<string>(borrowers[0] || '');
   const [dueDays, setDueDays] = useState<number>(14);
+  const [operation, setOperation] = useState<'checkout' | 'return'>('checkout');
   const [lastReceipt, setLastReceipt] = useState<ScanResponse | null>(null);
   const bookIdInputRef = useRef<HTMLInputElement>(null);
 
@@ -51,12 +52,12 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
       alert('Please enter a Book ID.');
       return;
     }
-    if (!selectedBorrower) {
+    if (operation === 'checkout' && !selectedBorrower) {
       alert('Please select a Borrower.');
       return;
     }
 
-    const result = await onScan(bookId.trim(), selectedBorrower, dueDays);
+    const result = await onScan(bookId.trim(), selectedBorrower, dueDays, operation);
     if (result.success) {
       setBookId(''); // Clear for next scan
       setLastReceipt(result);
@@ -70,6 +71,27 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
     <div className="p-4 bg-secondary-blue rounded-lg shadow-md max-w-lg mx-auto my-6">
       <h2 className="text-2xl font-bold text-center mb-6 text-text-dark">Scan Station!</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
+        <fieldset>
+          <legend className="mb-2 block text-lg font-medium text-text-dark">What are you doing?</legend>
+          <div className="grid grid-cols-2 gap-2 rounded-xl bg-white p-2">
+            <button
+              type="button"
+              onClick={() => { setOperation('checkout'); requestAnimationFrame(focusScannerInput); }}
+              className={`min-h-12 rounded-lg text-lg font-bold ${operation === 'checkout' ? 'bg-primary-green text-white' : 'bg-gray-100 text-gray-700'}`}
+              aria-pressed={operation === 'checkout'}
+            >
+              Check Out
+            </button>
+            <button
+              type="button"
+              onClick={() => { setOperation('return'); requestAnimationFrame(focusScannerInput); }}
+              className={`min-h-12 rounded-lg text-lg font-bold ${operation === 'return' ? 'bg-accent-yellow text-text-dark' : 'bg-gray-100 text-gray-700'}`}
+              aria-pressed={operation === 'return'}
+            >
+              Check In
+            </button>
+          </div>
+        </fieldset>
         <div>
           <label htmlFor="borrower" className="block text-lg font-medium text-text-dark mb-2">
             Who's Borrowing?
@@ -80,7 +102,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
             onChange={(e) => setSelectedBorrower(e.target.value)}
             className="w-full p-3 border border-border-light rounded-lg shadow-sm focus:ring-primary-green focus:border-primary-green transition-colors duration-200 bg-white text-lg"
             aria-label="Select borrower"
-            disabled={borrowers.length === 0}
+            disabled={operation === 'return' || borrowers.length === 0}
           >
             {borrowers.length === 0 && <option value="">No borrowers available</option>}
             {borrowers.map((borrower) => (
@@ -91,7 +113,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
           </select>
         </div>
 
-        <div>
+        {operation === 'checkout' && <div>
           <label htmlFor="dueDays" className="block text-lg font-medium text-text-dark mb-2">
             Due in (days)
           </label>
@@ -105,7 +127,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
             max="365"
             aria-label="Due days"
           />
-        </div>
+        </div>}
 
         <div>
           <label htmlFor="bookId" className="block text-lg font-medium text-text-dark mb-2">
@@ -130,10 +152,10 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
         <button
           type="submit"
           className="w-full bg-primary-green text-white text-xl font-bold py-4 px-6 rounded-lg shadow-md hover:bg-emerald-600 transition-colors duration-200 focus:outline-none focus:ring-4 focus:ring-primary-green focus:ring-opacity-75"
-          disabled={borrowers.length === 0}
+          disabled={operation === 'checkout' && borrowers.length === 0}
           aria-label="Process scan"
         >
-          Process Scan
+          {operation === 'checkout' ? 'Process Check Out' : 'Process Check In'}
         </button>
       </form>
       {lastReceipt?.success && (

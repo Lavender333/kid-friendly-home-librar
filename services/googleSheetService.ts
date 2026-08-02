@@ -127,14 +127,14 @@ export class SheetService {
     }
   }
 
-  async scanBook(bookId: string, borrower: string, dueDays: number): Promise<ScanResponse> {
+  async scanBook(bookId: string, borrower: string, dueDays: number, operation: 'checkout' | 'return'): Promise<ScanResponse> {
     // Fix: Remove the specific string literal comparison for webAppUrl.
     // The App.tsx component now handles the initial URL configuration check.
     if (!this.webAppUrl) {
       return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     }
     try {
-      const jsonResponse = await this.sendMutation<ScanResponse>({ bookId, borrower, dueDays });
+      const jsonResponse = await this.sendMutation<ScanResponse>({ bookId, borrower, dueDays, operation });
       return jsonResponse;
 
     } catch (error) {
