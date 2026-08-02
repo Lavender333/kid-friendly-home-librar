@@ -64,22 +64,9 @@ const BORROWER_COL_NAME_IDX = 0; // A
  * Ensures proper CORS headers for web app deployment.
  */
 function setCorsHeaders(response) {
-  response.setHeader('Access-Control-Allow-Origin', '*'); // Adjust for specific origins in production
-  response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  response.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  response.setHeader('Access-Control-Max-Age', '3600'); // Cache preflight results for 1 hour
+  // TextOutput has no setHeader method. Google supplies response headers for
+  // deployed web apps; the frontend uses CORS-simple requests.
   return response;
-}
-
-/**
- * Handles OPTIONS requests for CORS preflight.
- * This is crucial for cross-origin communication, especially for POST requests.
- */
-function doOptions() {
-  const response = ContentService.createTextOutput('');
-  // Explicitly set Content-Type for OPTIONS, as browser might expect it.
-  response.setMimeType(ContentService.MimeType.JSON); 
-  return setCorsHeaders(response);
 }
 
 /**

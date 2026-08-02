@@ -1,20 +1,41 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Kid-Friendly Home Library
 
-# Run and deploy your AI Studio app
+A React frontend hosted on GitHub Pages with a Google Sheet and Google Apps
+Script web app as its backend.
 
-This contains everything you need to run your app locally.
+## Required Google Sheet tabs
 
-View your app in AI Studio: https://ai.studio/apps/drive/1ymawP0T5xa2CkK_oQrw-uW_hQ6PmfYOG
+- `LIBRARY` — Barcode, Book ID, Title, Author, Publisher, Publication Year,
+  Genre, Status, Borrower, Checkout Date, Due Date, Notes
+- `CHECKOUT LOG` — Timestamp, Book ID, Title, Borrower, Action, Notes
+- `BORROWERS` — Name
 
-## Run Locally
+Names, spelling, and spaces must match exactly. Put the headers in row 1.
 
-**Prerequisites:**  Node.js
+## Deploy the backend (required)
 
+1. Open the Google Sheet, then **Extensions → Apps Script**.
+2. Replace the editor contents with [`Code.gs`](./Code.gs) and save.
+3. Select **Deploy → New deployment → Web app**.
+4. Set **Execute as** to **Me** and **Who has access** to **Anyone**.
+5. Deploy, authorize it, and copy the URL ending in `/exec`.
+6. Put that URL in `SHEET_WEB_APP_URL` in `App.tsx`, or set the build variable
+   `VITE_SHEET_WEB_APP_URL`.
+7. Open `<your /exec URL>?tab=BORROWERS`. It must show JSON beginning with
+   `{"success":true`, not a Google error page.
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Whenever `Code.gs` changes, use **Deploy → Manage deployments → Edit**, choose
+**New version**, and deploy again. Saving code alone does not update a deployment.
+
+The URL currently in `App.tsx` is stale and returns `Script function not found:
+doGet`; redeploy the script before the site can load data.
+
+## Development
+
+```sh
+npm install
+npm run dev
+```
+
+Run `npm test` and `npm run build` before deploying. The Pages workflow deploys
+`dist/` automatically after changes reach `main`.

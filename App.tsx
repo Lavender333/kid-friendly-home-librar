@@ -11,9 +11,8 @@ import { SheetService } from './services/googleSheetService';
 import { Book, LogEntry, Borrower } from './types';
 import LoadingSpinner from './components/LoadingSpinner';
 
-// <<< IMPORTANT: Replace with your deployed Google Apps Script Web App URL
-// Deployment URL provided by user on 2026-02-06
-const SHEET_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwviq24M62HGcgF3Qvz9yFX6FH1CmECIsVGlrJ_yqVrbJ_t5DPvvTFgoGtpVik7BO8/exec';
+const SHEET_WEB_APP_URL = import.meta.env.VITE_SHEET_WEB_APP_URL ||
+  'https://script.google.com/macros/s/AKfycbwviq24M62HGcgF3Qvz9yFX6FH1CmECIsVGlrJ_yqVrbJ_t5DPvvTFgoGtpVik7BO8/exec';
 
 const App: React.FC = () => {
   const [libraryData, setLibraryData] = useState<Book[]>([]);
