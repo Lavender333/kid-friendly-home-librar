@@ -132,9 +132,11 @@ const App: React.FC = () => {
     }
   }, [sheetService, checkWebAppUrl]);
 
-  const handleCheckInFromLog = React.useCallback(async (bookId: string) => {
-    const response = await handleScan(bookId, '', 14, 'return');
-    if (response.success) await fetchCheckoutLogData();
+  const handleCheckInFromLog = React.useCallback(async (bookId: string, borrower: string) => {
+    // Version 5 requires a non-empty borrower even for returns. The server still
+    // records the borrower stored on the checked-out book as the authoritative value.
+    const response = await handleScan(bookId, borrower || 'Check In', 14, 'return');
+    if (response.success) void fetchCheckoutLogData(true);
     return response;
   }, [handleScan, fetchCheckoutLogData]);
 
