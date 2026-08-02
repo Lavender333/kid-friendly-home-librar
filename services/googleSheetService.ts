@@ -25,11 +25,12 @@ export class SheetService {
   }
 
   private async sendMutation<T>(payload: object): Promise<T> {
-    // Apps Script responds to POST with a cross-origin redirect. iPad Safari can
-    // replay that redirect as a plain GET to doGet, losing the POST body. A
-    // nonce-protected GET keeps the complete request intact across the redirect.
-    const request = encodeURIComponent(JSON.stringify(payload));
-    const response = await fetch(`${this.webAppUrl}?request=${request}&_=${Date.now()}`, {
+    // text/plain is a CORS-simple request. It works with both the active Version
+    // 5 deployment's doPost handler and the latest Code.gs deployment.
+    const response = await fetch(this.webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
       cache: 'no-store',
     });
     return this.readJson<T>(response);

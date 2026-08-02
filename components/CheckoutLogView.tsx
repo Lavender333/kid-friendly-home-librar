@@ -7,12 +7,12 @@ import LoadingSpinner from './LoadingSpinner';
 interface CheckoutLogViewProps {
   logEntries: LogEntry[];
   isLoading: boolean;
-  onCheckIn: (bookId: string) => Promise<ScanResponse>;
+  onCheckIn: (bookId: string, borrower: string) => Promise<ScanResponse>;
 }
 
 const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading, onCheckIn }) => {
-  const [confirmingBookId, setConfirmingBookId] = React.useState('');
   const [checkingInBookId, setCheckingInBookId] = React.useState('');
+  const [completedBookIds, setCompletedBookIds] = React.useState<Set<string>>(() => new Set());
 
   const latestTransactionByBook = React.useMemo(() => {
     const latest = new Map<string, number>();
@@ -25,11 +25,26 @@ const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading
     return latest;
   }, [logEntries]);
 
-  const checkIn = async (bookId: string) => {
+  React.useEffect(() => {
+    // Once the refreshed log contains the Return row, forget the temporary
+    // optimistic state so a future checkout of the same book can be returned.
+    setCompletedBookIds(current => {
+      const next = new Set(Array.from(current).filter(bookId => {
+        const latestIndex = latestTransactionByBook.get(bookId);
+        return latestIndex !== undefined
+          && logEntries[latestIndex]?.action.trim().toLowerCase() === 'checkout';
+      }));
+      return next;
+    });
+  }, [logEntries, latestTransactionByBook]);
+
+  const checkIn = async (bookId: string, borrower: string) => {
     setCheckingInBookId(bookId);
-    const result = await onCheckIn(bookId);
+    const result = await onCheckIn(bookId, borrower);
     setCheckingInBookId('');
-    if (result.success) setConfirmingBookId('');
+    if (result.success) {
+      setCompletedBookIds(current => new Set(current).add(bookId));
+    }
   };
 
   if (isLoading && logEntries.length === 0) {
@@ -68,8 +83,8 @@ const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading
           <tbody className="bg-white divide-y divide-gray-200">
             {logEntries.map((entry, index) => {
               const isActiveCheckout = entry.action.trim().toLowerCase() === 'checkout'
-                && latestTransactionByBook.get(entry.bookId) === index;
-              const isConfirming = confirmingBookId === entry.bookId;
+                && latestTransactionByBook.get(entry.bookId) === index
+                && !completedBookIds.has(entry.bookId);
               const isCheckingIn = checkingInBookId === entry.bookId;
 
               return <tr key={index} className={isActiveCheckout ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}>
@@ -90,38 +105,15 @@ const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading
                   {entry.action}
                 </td>
                 <td className="px-3 py-3 text-sm md:px-6">
-                  {isActiveCheckout && !isConfirming && (
+                  {isActiveCheckout && (
                     <button
                       type="button"
-                      onClick={() => setConfirmingBookId(entry.bookId)}
-                      disabled={isLoading || !!checkingInBookId}
+                      onClick={() => checkIn(entry.bookId, entry.borrower)}
+                      disabled={!!checkingInBookId}
                       className="min-h-11 whitespace-nowrap rounded-lg bg-accent-yellow px-4 font-bold text-text-dark disabled:opacity-50"
                     >
-                      Check In
+                      {isCheckingIn ? 'Checking In…' : 'Check In'}
                     </button>
-                  )}
-                  {isActiveCheckout && isConfirming && (
-                    <div className="min-w-48 rounded-lg border border-accent-yellow bg-white p-2">
-                      <p className="mb-2 font-semibold">Check in this book?</p>
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => checkIn(entry.bookId)}
-                          disabled={isCheckingIn}
-                          className="min-h-10 rounded-lg bg-primary-green px-3 font-bold text-white disabled:opacity-50"
-                        >
-                          {isCheckingIn ? 'Checking In…' : 'Yes, Check In'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setConfirmingBookId('')}
-                          disabled={isCheckingIn}
-                          className="min-h-10 rounded-lg bg-gray-200 px-3 font-semibold"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
                   )}
                   {!isActiveCheckout && <span className="text-gray-400">—</span>}
                 </td>
@@ -130,7 +122,7 @@ const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading
           </tbody>
         </table>
       )}
-      {isLoading && logEntries.length > 0 && (
+      {isLoading && logEntries.length > 0 && !checkingInBookId && (
         <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center rounded-lg">
           <LoadingSpinner />
         </div>
