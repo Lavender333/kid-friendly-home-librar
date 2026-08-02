@@ -206,11 +206,12 @@ function handleMutation(request) {
 
     if (request.action === 'addBook') {
       const book = request.book || {};
-      const bookId = String(book.bookId || '').trim();
+      const generatedId = `ML-${Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
+      const bookId = String(book.bookId || book.barcode || generatedId).trim();
       const barcode = String(book.barcode || bookId).trim();
       const title = String(book.title || '').trim();
-      if (!bookId || !title) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Book ID and title are required.' }))
+      if (!title) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Book title is required.' }))
           .setMimeType(ContentService.MimeType.JSON);
       }
 
@@ -233,7 +234,7 @@ function handleMutation(request) {
         String(book.publisher || '').trim(), String(book.publicationYear || '').trim(),
         String(book.genre || '').trim(), 'On Shelf', '', '', '', String(book.notes || '').trim()
       ]);
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Saved '${title}'.` }))
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Saved '${title}' with barcode ${barcode}.`, bookId: bookId, barcode: barcode }))
         .setMimeType(ContentService.MimeType.JSON);
     }
 
