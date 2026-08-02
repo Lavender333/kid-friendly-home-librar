@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Routes, Route, useNavigate } from 'react-router-dom';
+import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
 import Navigation from './components/Navigation';
 import ScanStation from './components/ScanStation';
@@ -22,6 +22,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
   const navigate = useNavigate();
+  const location = useLocation();
 
   const sheetService = React.useMemo(() => new SheetService(SHEET_WEB_APP_URL), []);
 
@@ -94,9 +95,7 @@ const App: React.FC = () => {
       const response = await sheetService.scanBook(bookId, borrower, dueDays, operation);
       if (response.success) {
         setMessage({ text: `${response.action}: ${response.bookId} (${response.title}) by ${response.borrower}`, type: 'success' });
-        fetchLibraryData(); // Refresh library data
-        fetchCheckoutLogData(); // Refresh log data
-        return { success: true, message: response.message };
+        return response;
       } else {
         setMessage({ text: response.message || 'Scan failed.', type: 'error' });
         return { success: false, message: response.message };
@@ -107,7 +106,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [sheetService, fetchLibraryData, fetchCheckoutLogData, checkWebAppUrl]);
+  }, [sheetService, checkWebAppUrl]);
 
   const handleAddBook = React.useCallback(async (book: Book) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
@@ -115,12 +114,11 @@ const App: React.FC = () => {
     try {
       const response = await sheetService.addBook(book);
       setMessage({ text: response.message || (response.success ? 'Book saved.' : 'Failed to save book.'), type: response.success ? 'success' : 'error' });
-      if (response.success) fetchLibraryData();
       return response;
     } finally {
       setIsLoading(false);
     }
-  }, [sheetService, fetchLibraryData, checkWebAppUrl]);
+  }, [sheetService, checkWebAppUrl]);
 
   const handleAddNewBorrower = React.useCallback(async (name: string) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
@@ -129,7 +127,7 @@ const App: React.FC = () => {
       const response = await sheetService.addBorrower(name);
       if (response.success) {
         setMessage({ text: response.message || `Borrower '${name}' added.`, type: 'success' });
-        fetchBorrowersData(); // Refresh borrowers list
+        setBorrowersList(current => [...current, { name: name.trim() }]);
         return { success: true, message: response.message };
       } else {
         setMessage({ text: response.message || 'Failed to add borrower.', type: 'error' });
@@ -141,7 +139,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [sheetService, fetchBorrowersData, checkWebAppUrl]);
+  }, [sheetService, checkWebAppUrl]);
 
   const handleEditBorrower = React.useCallback(async (oldName: string, newName: string) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
@@ -150,9 +148,7 @@ const App: React.FC = () => {
       const response = await sheetService.editBorrower(oldName, newName);
       if (response.success) {
         setMessage({ text: response.message || `Borrower '${oldName}' updated to '${newName}'.`, type: 'success' });
-        fetchBorrowersData(); // Refresh borrowers list
-        fetchLibraryData(); // Refresh library data in case books were checked out by this borrower
-        fetchCheckoutLogData(); // Refresh log data
+        setBorrowersList(current => current.map(item => item.name === oldName ? { name: newName.trim() } : item));
         return { success: true, message: response.message };
       } else {
         setMessage({ text: response.message || 'Failed to update borrower.', type: 'error' });
@@ -164,13 +160,17 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [sheetService, fetchBorrowersData, fetchLibraryData, fetchCheckoutLogData, checkWebAppUrl]);
+  }, [sheetService, checkWebAppUrl]);
 
   React.useEffect(() => {
-    fetchLibraryData();
-    fetchCheckoutLogData();
-    fetchBorrowersData(); // Fetch borrowers on initial load
-  }, [fetchLibraryData, fetchCheckoutLogData, fetchBorrowersData]);
+    if (location.pathname === '/library') {
+      fetchLibraryData();
+    } else if (location.pathname === '/checkout-log') {
+      fetchCheckoutLogData();
+    } else if (location.pathname === '/' || location.pathname === '/manage-borrowers') {
+      fetchBorrowersData();
+    }
+  }, [location.pathname, fetchLibraryData, fetchCheckoutLogData, fetchBorrowersData]);
 
   React.useEffect(() => {
     if (message.text) {
