@@ -27,8 +27,9 @@ Names, spelling, and spaces must match exactly. Put the headers in row 1.
 Whenever `Code.gs` changes, use **Deploy → Manage deployments → Edit**, choose
 **New version**, and deploy again. Saving code alone does not update a deployment.
 
-The URL currently in `App.tsx` is stale and returns `Script function not found:
-doGet`; redeploy the script before the site can load data.
+The production URL in `App.tsx` points to the verified Mariahs Library backend.
+When deploying a replacement Apps Script version under a new URL, update that
+value and verify all three tab endpoints before publishing the frontend.
 
 ## Development
 
