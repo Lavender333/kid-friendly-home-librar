@@ -12,7 +12,7 @@ import { Book, LogEntry, Borrower } from './types';
 import LoadingSpinner from './components/LoadingSpinner';
 
 const SHEET_WEB_APP_URL = import.meta.env.VITE_SHEET_WEB_APP_URL ||
-  'https://script.google.com/macros/s/AKfycbwviq24M62HGcgF3Qvz9yFX6FH1CmECIsVGlrJ_yqVrbJ_t5DPvvTFgoGtpVik7BO8/exec';
+  'https://script.google.com/macros/s/AKfycbxEN3-SwUG7TLOBOUuazXZUnk3SbaGOBtf4Fl3A5fOzYzCgxx6pC58Jw9P-HqjnIhFg/exec';
 
 const App: React.FC = () => {
   const [libraryData, setLibraryData] = useState<Book[]>([]);
