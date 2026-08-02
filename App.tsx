@@ -127,6 +127,12 @@ const App: React.FC = () => {
     }
   }, [sheetService, checkWebAppUrl]);
 
+  const handleCheckInFromLog = React.useCallback(async (bookId: string) => {
+    const response = await handleScan(bookId, '', 14, 'return');
+    if (response.success) await fetchCheckoutLogData();
+    return response;
+  }, [handleScan, fetchCheckoutLogData]);
+
   const handleAddBook = React.useCallback(async (book: Book) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
     setIsLoading(true);
@@ -250,7 +256,7 @@ const App: React.FC = () => {
             <Route path="/" element={<ScanStation onScan={handleScan} borrowers={borrowerNames} />} />
             <Route path="/library" element={<LibraryView books={libraryData} isLoading={isLoading} onUpdateStatus={handleUpdateBookStatus} />} />
             <Route path="/add-book" element={<AddBookView onAddBook={handleAddBook} isLoading={isLoading} />} />
-            <Route path="/checkout-log" element={<CheckoutLogView logEntries={logData} isLoading={isLoading} />} />
+            <Route path="/checkout-log" element={<CheckoutLogView logEntries={logData} isLoading={isLoading} onCheckIn={handleCheckInFromLog} />} />
             <Route
               path="/manage-borrowers"
               element={<ManageBorrowersView

@@ -1,15 +1,37 @@
 
 
 import React from 'react';
-import { LogEntry } from '../types';
+import { LogEntry, ScanResponse } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 
 interface CheckoutLogViewProps {
   logEntries: LogEntry[];
   isLoading: boolean;
+  onCheckIn: (bookId: string) => Promise<ScanResponse>;
 }
 
-const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading }) => {
+const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading, onCheckIn }) => {
+  const [confirmingBookId, setConfirmingBookId] = React.useState('');
+  const [checkingInBookId, setCheckingInBookId] = React.useState('');
+
+  const latestTransactionByBook = React.useMemo(() => {
+    const latest = new Map<string, number>();
+    logEntries.forEach((entry, index) => {
+      const action = entry.action.trim().toLowerCase();
+      if (entry.bookId && (action === 'checkout' || action === 'return')) {
+        latest.set(entry.bookId, index);
+      }
+    });
+    return latest;
+  }, [logEntries]);
+
+  const checkIn = async (bookId: string) => {
+    setCheckingInBookId(bookId);
+    const result = await onCheckIn(bookId);
+    setCheckingInBookId('');
+    if (result.success) setConfirmingBookId('');
+  };
+
   if (isLoading && logEntries.length === 0) {
     return <LoadingSpinner />;
   }
@@ -38,11 +60,19 @@ const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider md:px-6 md:text-sm">
                 Action
               </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider md:px-6 md:text-sm">
+                Check In
+              </th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {logEntries.map((entry, index) => (
-              <tr key={index} className="hover:bg-gray-50">
+            {logEntries.map((entry, index) => {
+              const isActiveCheckout = entry.action.trim().toLowerCase() === 'checkout'
+                && latestTransactionByBook.get(entry.bookId) === index;
+              const isConfirming = confirmingBookId === entry.bookId;
+              const isCheckingIn = checkingInBookId === entry.bookId;
+
+              return <tr key={index} className={isActiveCheckout ? 'bg-yellow-50 hover:bg-yellow-100' : 'hover:bg-gray-50'}>
                 <td className="px-3 py-4 whitespace-nowrap text-sm text-gray-900 md:px-6">
                   {entry.timestamp}
                 </td>
@@ -59,8 +89,44 @@ const CheckoutLogView: React.FC<CheckoutLogViewProps> = ({ logEntries, isLoading
                   ${entry.action === 'Checkout' ? 'text-soft-pink' : 'text-primary-green'}`}>
                   {entry.action}
                 </td>
-              </tr>
-            ))}
+                <td className="px-3 py-3 text-sm md:px-6">
+                  {isActiveCheckout && !isConfirming && (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmingBookId(entry.bookId)}
+                      disabled={isLoading || !!checkingInBookId}
+                      className="min-h-11 whitespace-nowrap rounded-lg bg-accent-yellow px-4 font-bold text-text-dark disabled:opacity-50"
+                    >
+                      Check In
+                    </button>
+                  )}
+                  {isActiveCheckout && isConfirming && (
+                    <div className="min-w-48 rounded-lg border border-accent-yellow bg-white p-2">
+                      <p className="mb-2 font-semibold">Check in this book?</p>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => checkIn(entry.bookId)}
+                          disabled={isCheckingIn}
+                          className="min-h-10 rounded-lg bg-primary-green px-3 font-bold text-white disabled:opacity-50"
+                        >
+                          {isCheckingIn ? 'Checking In…' : 'Yes, Check In'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingBookId('')}
+                          disabled={isCheckingIn}
+                          className="min-h-10 rounded-lg bg-gray-200 px-3 font-semibold"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {!isActiveCheckout && <span className="text-gray-400">—</span>}
+                </td>
+              </tr>;
+            })}
           </tbody>
         </table>
       )}
