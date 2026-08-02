@@ -229,7 +229,12 @@ const App: React.FC = () => {
     } else if (location.pathname === '/checkout-log') {
       fetchCheckoutLogData(logData.length > 0);
     } else if (location.pathname === '/') {
+      // Warm the other screens while the user is at Scan Station. Apps Script
+      // can take about two seconds on its first request, so prefetching here
+      // makes Library and Checkout Log ready before their buttons are tapped.
       fetchBorrowersData(true);
+      fetchLibraryData(true);
+      fetchCheckoutLogData(true);
     } else if (location.pathname === '/manage-borrowers') {
       fetchBorrowersData();
     }
