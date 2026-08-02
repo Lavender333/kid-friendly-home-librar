@@ -34,6 +34,11 @@ A Name (0)
 const TAB_LIBRARY = "LIBRARY";
 const TAB_LOG = "CHECKOUT LOG";
 const TAB_BORROWERS = "BORROWERS"; // New constant for borrowers tab
+const SPREADSHEET_ID = "1rRO12mPbnNFE12G3c3hL_VlbHsrUSQeO";
+
+function getLibrarySpreadsheet() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID);
+}
 
 // LIBRARY column indices (0-indexed for script internal use)
 const COL_BARCODE_IDX = 0; // A
@@ -75,7 +80,7 @@ function setCorsHeaders(response) {
 function doGet(e) {
   const tabName = e.parameter.tab;
   try {
-    const ss = SpreadsheetApp.getActive();
+    const ss = getLibrarySpreadsheet();
     let responseData = { success: false, message: 'Invalid tab specified.' };
 
     if (tabName === TAB_LIBRARY) {
@@ -143,7 +148,7 @@ function doGet(e) {
 function doPost(e) {
   try {
     const request = JSON.parse(e.postData.contents);
-    const ss = SpreadsheetApp.getActive();
+    const ss = getLibrarySpreadsheet();
 
     // Handle adding a new borrower
     if (request.action === 'addBorrower') {
