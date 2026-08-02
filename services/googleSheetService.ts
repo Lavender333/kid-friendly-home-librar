@@ -24,6 +24,17 @@ export class SheetService {
     }
   }
 
+  private async sendMutation<T>(payload: object): Promise<T> {
+    // Apps Script responds to POST with a cross-origin redirect. iPad Safari can
+    // replay that redirect as a plain GET to doGet, losing the POST body. A
+    // nonce-protected GET keeps the complete request intact across the redirect.
+    const request = encodeURIComponent(JSON.stringify(payload));
+    const response = await fetch(`${this.webAppUrl}?request=${request}&_=${Date.now()}`, {
+      cache: 'no-store',
+    });
+    return this.readJson<T>(response);
+  }
+
   private async fetchData<T>(tab: string): Promise<SheetResponse<T>> {
     // Fix: Remove the specific string literal comparison for webAppUrl.
     // The App.tsx component now handles the initial URL configuration check.
@@ -79,12 +90,7 @@ export class SheetService {
       return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     }
     try {
-      const response = await fetch(this.webAppUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ action: 'addBook', book }),
-      });
-      return await this.readJson<{ success: boolean; message?: string }>(response);
+      return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'addBook', book });
     } catch (error) {
       console.error('Error adding book:', error);
       return { success: false, message: `Failed to add book: ${(error as Error).message}` };
@@ -98,15 +104,7 @@ export class SheetService {
       return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     }
     try {
-      const response = await fetch(this.webAppUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({ action: 'addBorrower', borrowerName: name }),
-      });
-
-      const jsonResponse = await this.readJson<{ success: boolean; message?: string }>(response);
+      const jsonResponse = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'addBorrower', borrowerName: name });
       return jsonResponse;
 
     } catch (error) {
@@ -120,15 +118,7 @@ export class SheetService {
       return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     }
     try {
-      const response = await fetch(this.webAppUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({ action: 'editBorrower', oldName, newName }),
-      });
-
-      const jsonResponse = await this.readJson<{ success: boolean; message?: string }>(response);
+      const jsonResponse = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'editBorrower', oldName, newName });
       return jsonResponse;
 
     } catch (error) {
@@ -144,15 +134,7 @@ export class SheetService {
       return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     }
     try {
-      const response = await fetch(this.webAppUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'text/plain;charset=utf-8',
-        },
-        body: JSON.stringify({ bookId, borrower, dueDays }),
-      });
-
-      const jsonResponse = await this.readJson<ScanResponse>(response);
+      const jsonResponse = await this.sendMutation<ScanResponse>({ bookId, borrower, dueDays });
       return jsonResponse;
 
     } catch (error) {
