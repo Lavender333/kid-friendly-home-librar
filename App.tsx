@@ -14,11 +14,29 @@ import LoadingSpinner from './components/LoadingSpinner';
 
 const SHEET_WEB_APP_URL = import.meta.env.VITE_SHEET_WEB_APP_URL ||
   'https://script.google.com/macros/s/AKfycbxEN3-SwUG7TLOBOUuazXZUnk3SbaGOBtf4Fl3A5fOzYzCgxx6pC58Jw9P-HqjnIhFg/exec';
+const BORROWERS_CACHE_KEY = 'mariahs-library-borrowers';
+
+const readBorrowersCache = (): Borrower[] => {
+  try {
+    const cached = localStorage.getItem(BORROWERS_CACHE_KEY);
+    return cached ? JSON.parse(cached) : [];
+  } catch {
+    return [];
+  }
+};
+
+const writeBorrowersCache = (borrowers: Borrower[]) => {
+  try {
+    localStorage.setItem(BORROWERS_CACHE_KEY, JSON.stringify(borrowers));
+  } catch {
+    // Private browsing can disable storage; the live Sheet remains authoritative.
+  }
+};
 
 const App: React.FC = () => {
   const [libraryData, setLibraryData] = useState<Book[]>([]);
   const [logData, setLogData] = useState<LogEntry[]>([]);
-  const [borrowersList, setBorrowersList] = useState<Borrower[]>([]);
+  const [borrowersList, setBorrowersList] = useState<Borrower[]>(readBorrowersCache);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
   const navigate = useNavigate();
@@ -70,20 +88,21 @@ const App: React.FC = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetService, checkWebAppUrl]);
 
-  const fetchBorrowersData = React.useCallback(async () => {
+  const fetchBorrowersData = React.useCallback(async (silent = false) => {
     if (!checkWebAppUrl()) return;
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     try {
       const { data, success, message: msg } = await sheetService.getBorrowers();
       if (success && data) {
         setBorrowersList(data);
-      } else {
+        writeBorrowersCache(data);
+      } else if (!silent) {
         setMessage({ text: msg || 'Failed to fetch borrowers data.', type: 'error' });
       }
     } catch (error) {
-      setMessage({ text: `Error fetching borrowers data: ${(error as Error).message}`, type: 'error' });
+      if (!silent) setMessage({ text: `Error fetching borrowers data: ${(error as Error).message}`, type: 'error' });
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetService, checkWebAppUrl]);
@@ -144,7 +163,11 @@ const App: React.FC = () => {
       const response = await sheetService.addBorrower(name);
       if (response.success) {
         setMessage({ text: response.message || `Borrower '${name}' added.`, type: 'success' });
-        setBorrowersList(current => [...current, { name: name.trim() }]);
+        setBorrowersList(current => {
+          const updated = [...current, { name: name.trim() }];
+          writeBorrowersCache(updated);
+          return updated;
+        });
         return { success: true, message: response.message };
       } else {
         setMessage({ text: response.message || 'Failed to add borrower.', type: 'error' });
@@ -165,7 +188,11 @@ const App: React.FC = () => {
       const response = await sheetService.editBorrower(oldName, newName);
       if (response.success) {
         setMessage({ text: response.message || `Borrower '${oldName}' updated to '${newName}'.`, type: 'success' });
-        setBorrowersList(current => current.map(item => item.name === oldName ? { name: newName.trim() } : item));
+        setBorrowersList(current => {
+          const updated = current.map(item => item.name === oldName ? { name: newName.trim() } : item);
+          writeBorrowersCache(updated);
+          return updated;
+        });
         return { success: true, message: response.message };
       } else {
         setMessage({ text: response.message || 'Failed to update borrower.', type: 'error' });
@@ -184,7 +211,9 @@ const App: React.FC = () => {
       fetchLibraryData();
     } else if (location.pathname === '/checkout-log') {
       fetchCheckoutLogData();
-    } else if (location.pathname === '/' || location.pathname === '/manage-borrowers') {
+    } else if (location.pathname === '/') {
+      fetchBorrowersData(true);
+    } else if (location.pathname === '/manage-borrowers') {
       fetchBorrowersData();
     }
   }, [location.pathname, fetchLibraryData, fetchCheckoutLogData, fetchBorrowersData]);
