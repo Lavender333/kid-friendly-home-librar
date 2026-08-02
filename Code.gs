@@ -78,6 +78,14 @@ function setCorsHeaders(response) {
  * Handles GET requests from the web app for fetching data from various tabs.
  */
 function doGet(e) {
+  if (e.parameter.request) {
+    try {
+      return handleMutation(JSON.parse(e.parameter.request));
+    } catch (err) {
+      return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Error: ${err.message}` }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+  }
   const tabName = e.parameter.tab;
   try {
     const ss = getLibrarySpreadsheet();
@@ -146,8 +154,11 @@ function doGet(e) {
  * - For edit borrower: { action: 'editBorrower', oldName: string, newName: string }
  */
 function doPost(e) {
+  return handleMutation(JSON.parse(e.postData.contents));
+}
+
+function handleMutation(request) {
   try {
-    const request = JSON.parse(e.postData.contents);
     const ss = getLibrarySpreadsheet();
 
     if (request.action === 'addBook') {
