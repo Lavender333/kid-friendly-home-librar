@@ -13,7 +13,7 @@ import { Book, LogEntry, Borrower } from './types';
 import LoadingSpinner from './components/LoadingSpinner';
 
 const SHEET_WEB_APP_URL = import.meta.env.VITE_SHEET_WEB_APP_URL ||
-  'https://script.google.com/macros/s/AKfycbxEN3-SwUG7TLOBOUuazXZUnk3SbaGOBtf4Fl3A5fOzYzCgxx6pC58Jw9P-HqjnIhFg/exec';
+  'https://script.google.com/macros/s/AKfycbzY5UGjISEt41xme1uexx1cQwbo59TFvRY0QgH1L5kPF7aev2ZIoDHyRe3DeH88noO6/exec';
 const BORROWERS_CACHE_KEY = 'mariahs-library-borrowers';
 
 const readBorrowersCache = (): Borrower[] => {
