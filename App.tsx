@@ -14,29 +14,31 @@ import LoadingSpinner from './components/LoadingSpinner';
 
 const SHEET_WEB_APP_URL = import.meta.env.VITE_SHEET_WEB_APP_URL ||
   'https://script.google.com/macros/s/AKfycbzY5UGjISEt41xme1uexx1cQwbo59TFvRY0QgH1L5kPF7aev2ZIoDHyRe3DeH88noO6/exec';
+const LIBRARY_CACHE_KEY = 'mariahs-library-books';
+const LOG_CACHE_KEY = 'mariahs-library-checkout-log';
 const BORROWERS_CACHE_KEY = 'mariahs-library-borrowers';
 
-const readBorrowersCache = (): Borrower[] => {
+const readCache = <T,>(key: string): T[] => {
   try {
-    const cached = localStorage.getItem(BORROWERS_CACHE_KEY);
+    const cached = localStorage.getItem(key);
     return cached ? JSON.parse(cached) : [];
   } catch {
     return [];
   }
 };
 
-const writeBorrowersCache = (borrowers: Borrower[]) => {
+const writeCache = <T,>(key: string, data: T[]) => {
   try {
-    localStorage.setItem(BORROWERS_CACHE_KEY, JSON.stringify(borrowers));
+    localStorage.setItem(key, JSON.stringify(data));
   } catch {
     // Private browsing can disable storage; the live Sheet remains authoritative.
   }
 };
 
 const App: React.FC = () => {
-  const [libraryData, setLibraryData] = useState<Book[]>([]);
-  const [logData, setLogData] = useState<LogEntry[]>([]);
-  const [borrowersList, setBorrowersList] = useState<Borrower[]>(readBorrowersCache);
+  const [libraryData, setLibraryData] = useState<Book[]>(() => readCache<Book>(LIBRARY_CACHE_KEY));
+  const [logData, setLogData] = useState<LogEntry[]>(() => readCache<LogEntry>(LOG_CACHE_KEY));
+  const [borrowersList, setBorrowersList] = useState<Borrower[]>(() => readCache<Borrower>(BORROWERS_CACHE_KEY));
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
   const navigate = useNavigate();
@@ -52,38 +54,41 @@ const App: React.FC = () => {
     return true;
   }, []);
 
-  const fetchLibraryData = React.useCallback(async () => {
+  const fetchLibraryData = React.useCallback(async (silent = false) => {
     if (!checkWebAppUrl()) return;
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     try {
       const { data, success, message: msg } = await sheetService.getLibraryData();
       if (success && data) {
-        setLibraryData(data);
-      } else {
+        const books = data.filter(book => book.bookId?.trim());
+        setLibraryData(books);
+        writeCache(LIBRARY_CACHE_KEY, books);
+      } else if (!silent) {
         setMessage({ text: msg || 'Failed to fetch library data.', type: 'error' });
       }
     } catch (error) {
-      setMessage({ text: `Error fetching library data: ${(error as Error).message}`, type: 'error' });
+      if (!silent) setMessage({ text: `Error fetching library data: ${(error as Error).message}`, type: 'error' });
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetService, checkWebAppUrl]);
 
-  const fetchCheckoutLogData = React.useCallback(async () => {
+  const fetchCheckoutLogData = React.useCallback(async (silent = false) => {
     if (!checkWebAppUrl()) return;
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     try {
       const { data, success, message: msg } = await sheetService.getCheckoutLog();
       if (success && data) {
         setLogData(data);
-      } else {
+        writeCache(LOG_CACHE_KEY, data);
+      } else if (!silent) {
         setMessage({ text: msg || 'Failed to fetch checkout log.', type: 'error' });
       }
     } catch (error) {
-      setMessage({ text: `Error fetching checkout log: ${(error as Error).message}`, type: 'error' });
+      if (!silent) setMessage({ text: `Error fetching checkout log: ${(error as Error).message}`, type: 'error' });
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sheetService, checkWebAppUrl]);
@@ -95,7 +100,7 @@ const App: React.FC = () => {
       const { data, success, message: msg } = await sheetService.getBorrowers();
       if (success && data) {
         setBorrowersList(data);
-        writeBorrowersCache(data);
+        writeCache(BORROWERS_CACHE_KEY, data);
       } else if (!silent) {
         setMessage({ text: msg || 'Failed to fetch borrowers data.', type: 'error' });
       }
@@ -152,9 +157,13 @@ const App: React.FC = () => {
       const response = await sheetService.updateBookStatus(bookId, status);
       setMessage({ text: response.message || (response.success ? 'Status updated.' : 'Status update failed.'), type: response.success ? 'success' : 'error' });
       if (response.success) {
-        setLibraryData(current => current.map(book => book.bookId === bookId
-          ? { ...book, status, borrower: status === 'Checked Out' ? book.borrower : '', checkoutDate: status === 'Checked Out' ? book.checkoutDate : '', dueDate: status === 'Checked Out' ? book.dueDate : '' }
-          : book));
+        setLibraryData(current => {
+          const updated = current.map(book => book.bookId === bookId
+            ? { ...book, status, borrower: status === 'Checked Out' ? book.borrower : '', checkoutDate: status === 'Checked Out' ? book.checkoutDate : '', dueDate: status === 'Checked Out' ? book.dueDate : '' }
+            : book);
+          writeCache(LIBRARY_CACHE_KEY, updated);
+          return updated;
+        });
       }
       return response;
     } finally {
@@ -171,7 +180,7 @@ const App: React.FC = () => {
         setMessage({ text: response.message || `Borrower '${name}' added.`, type: 'success' });
         setBorrowersList(current => {
           const updated = [...current, { name: name.trim() }];
-          writeBorrowersCache(updated);
+          writeCache(BORROWERS_CACHE_KEY, updated);
           return updated;
         });
         return { success: true, message: response.message };
@@ -196,7 +205,7 @@ const App: React.FC = () => {
         setMessage({ text: response.message || `Borrower '${oldName}' updated to '${newName}'.`, type: 'success' });
         setBorrowersList(current => {
           const updated = current.map(item => item.name === oldName ? { name: newName.trim() } : item);
-          writeBorrowersCache(updated);
+          writeCache(BORROWERS_CACHE_KEY, updated);
           return updated;
         });
         return { success: true, message: response.message };
@@ -214,9 +223,9 @@ const App: React.FC = () => {
 
   React.useEffect(() => {
     if (location.pathname === '/library') {
-      fetchLibraryData();
+      fetchLibraryData(libraryData.length > 0);
     } else if (location.pathname === '/checkout-log') {
-      fetchCheckoutLogData();
+      fetchCheckoutLogData(logData.length > 0);
     } else if (location.pathname === '/') {
       fetchBorrowersData(true);
     } else if (location.pathname === '/manage-borrowers') {
@@ -239,8 +248,8 @@ const App: React.FC = () => {
       <div className="w-full max-w-4xl bg-white p-6 rounded-lg shadow-xl relative mt-4">
         <Navigation navigate={navigate} />
 
-        {/* Global Loading Spinner for any operation */}
-        {isLoading && <LoadingSpinner />}
+        {/* Scan Station has no page-level loader, so show one only there. */}
+        {isLoading && location.pathname === '/' && <LoadingSpinner />}
 
         {/* Global message/toast display */}
         {message.text && (
