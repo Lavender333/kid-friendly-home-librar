@@ -82,7 +82,7 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
       let result: BookLookupResult | null = null;
       try { result = await lookupGoogleBooks(value); } catch { result = null; }
       if (!result) { setLookupMessage('Trying a second book database…'); try { result = await lookupOpenLibrary(value); } catch { result = null; } }
-      if (!result) { setLookupMessage('Book information was not found online. Enter the title manually; a unique physical-copy ID will still be created when you save.'); titleRef.current?.focus(); return; }
+      if (!result) { setLookupMessage('Book information was not found online. Enter the title manually; the Library Book ID will be created automatically when you save.'); titleRef.current?.focus(); return; }
       setBook(current => ({ ...current, title: result.title || current.title, author: result.author || current.author, publisher: result.publisher || current.publisher, publicationYear: result.publicationYear || current.publicationYear, genre: result.genre || current.genre, notes: current.notes || result.description || `ISBN: ${value}` }));
       setLookupMessage(`✓ Book information found using ${result.source}.`);
       titleRef.current?.focus();
@@ -106,7 +106,7 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
       const canonicalBarcode = result.barcode || canonicalId;
       setSavedBook({ ...bookToSave, bookId: canonicalId, barcode: canonicalBarcode });
       setBook(createEmptyBook()); setIsbn('');
-      setLookupMessage('Ready to scan the next ISBN barcode. A new unique physical-copy ID will be created when saved.');
+      setLookupMessage('Ready to scan the next ISBN barcode. A new Library Book ID will be created automatically when saved.');
       requestAnimationFrame(() => isbnRef.current?.focus());
     }
   };
@@ -117,9 +117,9 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
       <p className="mb-5 text-center text-sm">Scan the ISBN to look up details. Saving creates a unique Library Book ID for this exact physical copy.</p>
       <form onSubmit={submit} className="space-y-4">
         <div className="rounded-xl border-2 border-primary-green bg-white p-4 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wide">Physical-Copy ID</p>
-          <p className="mt-1 font-mono text-xl font-bold">Created securely when saved</p>
-          <p className="mt-1 text-xs">Even two copies of the same title receive different IDs and barcodes.</p>
+          <p className="text-sm font-semibold uppercase tracking-wide">Library Book ID</p>
+          <p className="mt-1 text-lg font-bold">Created automatically when saved</p>
+          <p className="mt-1 text-xs">Each physical copy receives its own ID and barcode.</p>
         </div>
         <label className="block rounded-xl bg-white/80 p-4">
           <span className="mb-1 block text-lg font-bold">1. Scan ISBN</span>
@@ -135,10 +135,10 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
           <label><span className="mb-1 block font-semibold">Genre</span><input value={book.genre} onChange={e => update('genre', e.target.value)} className="w-full rounded-lg border p-3" /></label>
           <label className="md:col-span-2"><span className="mb-1 block font-semibold">Notes</span><textarea value={book.notes} onChange={e => update('notes', e.target.value)} className="w-full rounded-lg border p-3" rows={3} /></label>
         </div></details>
-        <button disabled={isLoading || isLookingUp} className="w-full rounded-lg bg-primary-green p-4 text-lg font-bold text-white disabled:opacity-60">{isLoading ? 'Saving…' : '3. Save Physical Copy & Create Barcode'}</button>
+        <button disabled={isLoading || isLookingUp} className="w-full rounded-lg bg-primary-green p-4 text-lg font-bold text-white disabled:opacity-60">{isLoading ? 'Saving…' : '3. Save Book & Create Barcode'}</button>
       </form>
       {formMessage && <p className="mt-4 text-center font-semibold">{formMessage}</p>}
-      {savedBook && <><div className="mt-5 rounded-xl bg-white p-5 text-center shadow"><p className="text-lg font-bold">Physical copy saved!</p><p className="mb-1"><strong>{savedBook.title}</strong></p><p className="mb-3 font-mono font-bold">{savedBook.bookId}</p><Barcode value={savedBook.barcode} className="mx-auto max-w-full" /><button type="button" onClick={() => window.print()} className="mt-3 rounded-lg bg-accent-yellow px-5 py-3 font-bold">Print 4×6 Book Label</button></div>
+      {savedBook && <><div className="mt-5 rounded-xl bg-white p-5 text-center shadow"><p className="text-lg font-bold">Book saved!</p><p className="mb-1"><strong>{savedBook.title}</strong></p><p className="mb-3 font-mono font-bold">{savedBook.bookId}</p><Barcode value={savedBook.barcode} className="mx-auto max-w-full" /><button type="button" onClick={() => window.print()} className="mt-3 rounded-lg bg-accent-yellow px-5 py-3 font-bold">Print 4×6 Book Label</button></div>
         <section className="thermal-receipt" aria-label="Thermal book label"><h1>Mariah's Library</h1><div className="receipt-rule" /><h2>{savedBook.title}</h2>{savedBook.author && <p style={{ textAlign: 'center' }}>by {savedBook.author}</p>}<p style={{ textAlign: 'center', fontWeight: 'bold' }}>{savedBook.bookId}</p><Barcode value={savedBook.barcode} className="mx-auto" height={95} width={3} /><p className="receipt-thanks">Scan to check out or return</p></section></>}
     </div>
   );
