@@ -124,6 +124,14 @@ export class SheetService {
     catch (error) { return { success: false, message: `Failed to ${archived ? 'archive' : 'restore'} book: ${(error as Error).message}` }; }
   }
 
+  async deleteBook(bookId: string) {
+    try {
+      const result = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'deleteBook', bookId });
+      if (result.success) this.readCache.delete('LIBRARY');
+      return result;
+    } catch (error) { return { success: false, message: `Failed to delete book: ${(error as Error).message}` }; }
+  }
+
   async addBorrower(name: string) {
     try {
       const result = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'addBorrower', borrowerName: name });
