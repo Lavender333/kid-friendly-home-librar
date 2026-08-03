@@ -73,13 +73,17 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
       setLastReceipt(result);
       setStationMessage(operation === 'checkout'
         ? `✓ ${result.title} checked out to ${result.borrower}. Scan the next book.`
-        : `✓ ${result.title} checked in. Scan the next returned book.`);
+        : `✓ ${result.title} checked in${result.borrower ? ` from ${result.borrower}` : ''}. Scan the next returned book.`);
     } else {
       setStationMessage(result.message || 'The scan could not be completed.');
     }
     setBookScan('');
     requestAnimationFrame(focusBookScanner);
   };
+
+  const actionSentence = lastReceipt?.action === 'Checkout'
+    ? `${lastReceipt.title} checked out to ${lastReceipt.borrower}.`
+    : `${lastReceipt?.title || 'Book'} checked in${lastReceipt?.borrower ? ` from ${lastReceipt.borrower}` : ''}.`;
 
   return (
     <div className="mx-auto my-6 max-w-lg rounded-lg bg-secondary-blue p-4 shadow-md">
@@ -138,32 +142,39 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
             value={bookScan}
             onChange={event => setBookScan(event.target.value)}
             className="w-full rounded-lg border-2 border-primary-green p-4 text-center font-mono text-2xl shadow-lg"
-            placeholder="ML-BOOK-ID"
+            placeholder="Scan book label"
             autoComplete="off"
             autoCapitalize="off"
             inputMode="none"
             spellCheck="false"
           />
-          <p className="mt-2 text-center text-xs text-gray-500">Scan the unique barcode label created by this library.</p>
+          <p className="mt-2 text-center text-xs text-gray-500">The barcode identifies the book, but it will not appear in the confirmation or receipt.</p>
         </div>
         <button type="submit" className="w-full rounded-lg bg-primary-green px-6 py-4 text-xl font-bold text-white">Process Book Scan</button>
       </form>
 
       {lastReceipt?.success && (
-        <div className="mt-6 rounded-xl border-2 border-primary-green bg-white p-4 text-center">
-          <p className="text-xl font-bold">{lastReceipt.action} complete!</p>
-          <p>{lastReceipt.title}</p>
-          <p className="font-mono">{lastReceipt.bookId}</p>
-          <button type="button" onClick={() => window.print()} className="mt-3 w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">Print MUNBYN Receipt</button>
+        <div className="mt-6 rounded-xl border-2 border-primary-green bg-white p-5 text-center">
+          <p className="text-2xl font-black">{lastReceipt.action === 'Checkout' ? 'Checked Out' : 'Checked In'}</p>
+          <p className="mt-3 text-xl font-bold">{lastReceipt.title}</p>
+          <p className="mt-2 text-lg">Borrower: <strong>{lastReceipt.borrower || '—'}</strong></p>
+          {lastReceipt.action === 'Checkout' && lastReceipt.dueDate && <p className="mt-1">Due: <strong>{lastReceipt.dueDate}</strong></p>}
+          <button type="button" onClick={() => window.print()} className="mt-4 w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">Print Receipt</button>
         </div>
       )}
 
       {lastReceipt?.success && (
         <section className="thermal-receipt" aria-label="Thermal receipt">
-          <h1>Mariah's Library</h1><div className="receipt-rule" /><h2>{lastReceipt.action} Receipt</h2>
-          <p><strong>Book:</strong> {lastReceipt.title}</p><p><strong>Book ID:</strong> {lastReceipt.bookId}</p><p><strong>Borrower:</strong> {lastReceipt.borrower}</p>
+          <h1>Mariah's Library</h1>
+          <div className="receipt-rule" />
+          <h2>{lastReceipt.action === 'Checkout' ? 'Checkout Receipt' : 'Check-In Receipt'}</h2>
+          <p style={{ textAlign: 'center', fontSize: '18pt', fontWeight: 'bold' }}>{actionSentence}</p>
+          <p><strong>Book:</strong> {lastReceipt.title}</p>
+          <p><strong>Borrower:</strong> {lastReceipt.borrower || '—'}</p>
           {lastReceipt.action === 'Checkout' && <p><strong>Due:</strong> {lastReceipt.dueDate}</p>}
-          <p><strong>Date:</strong> {lastReceipt.timestamp || new Date().toLocaleString()}</p><div className="receipt-rule" /><p className="receipt-thanks">Happy reading!</p>
+          <p><strong>Date:</strong> {lastReceipt.timestamp || new Date().toLocaleString()}</p>
+          <div className="receipt-rule" />
+          <p className="receipt-thanks">{lastReceipt.action === 'Checkout' ? 'Happy reading!' : 'Thank you for returning your book!'}</p>
         </section>
       )}
     </div>
