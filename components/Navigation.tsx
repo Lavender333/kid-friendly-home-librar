@@ -12,18 +12,9 @@ const Navigation: React.FC<NavigationProps> = ({ navigate }) => {
     navigate(path);
   };
 
-  const openLibraryCards = () => {
-    setActiveTab('/library-cards');
-    navigate('/');
-    window.setTimeout(() => {
-      window.dispatchEvent(new CustomEvent('open-library-cards'));
-    }, 50);
-  };
-
   React.useEffect(() => {
     const handleHashChange = () => {
-      const next = window.location.hash.substring(1) || '/';
-      if (next !== '/') setActiveTab(next);
+      setActiveTab(window.location.hash.substring(1) || '/');
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -31,30 +22,17 @@ const Navigation: React.FC<NavigationProps> = ({ navigate }) => {
 
   const getTabClasses = (path: string) =>
     `flex-1 text-center py-3 px-2 md:px-4 text-sm md:text-base font-semibold rounded-lg transition-all duration-200 ease-in-out
-    ${activeTab === path || (activeTab === '/' && path === '/')
+    ${activeTab === path || (path === '/manage-borrowers' && activeTab === '/library-cards')
       ? 'bg-primary-green text-white shadow-md'
       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`;
 
   return (
     <nav className="flex flex-wrap justify-around gap-1 bg-soft-pink p-2 rounded-xl shadow-inner mt-4 md:mt-6 sticky top-20 z-10">
-      <button onClick={() => handleNavClick('/')} className={getTabClasses('/')}>
-        Scan Station
-      </button>
-      <button onClick={() => handleNavClick('/library')} className={getTabClasses('/library')}>
-        Library
-      </button>
-      <button onClick={() => handleNavClick('/add-book')} className={getTabClasses('/add-book')}>
-        Add Book
-      </button>
-      <button onClick={openLibraryCards} className={getTabClasses('/library-cards')}>
-        Library Cards
-      </button>
-      <button onClick={() => handleNavClick('/checkout-log')} className={getTabClasses('/checkout-log')}>
-        Checkout Log
-      </button>
-      <button onClick={() => handleNavClick('/manage-borrowers')} className={getTabClasses('/manage-borrowers')}>
-        Manage Borrowers
-      </button>
+      <button onClick={() => handleNavClick('/')} className={getTabClasses('/')}>Scan Station</button>
+      <button onClick={() => handleNavClick('/library')} className={getTabClasses('/library')}>Library</button>
+      <button onClick={() => handleNavClick('/add-book')} className={getTabClasses('/add-book')}>Add Book</button>
+      <button onClick={() => handleNavClick('/checkout-log')} className={getTabClasses('/checkout-log')}>Checkout Log</button>
+      <button onClick={() => handleNavClick('/manage-borrowers')} className={getTabClasses('/manage-borrowers')}>Borrowers & Cards</button>
     </nav>
   );
 };
