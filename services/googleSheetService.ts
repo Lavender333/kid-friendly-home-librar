@@ -1,8 +1,9 @@
-
 import { Book, LogEntry, Borrower, SheetResponse, ScanResponse } from '../types';
 
 export class SheetService {
   private webAppUrl: string;
+  private readonly readCache = new Map<string, { expiresAt: number; value: unknown }>();
+  private readonly inFlightReads = new Map<string, Promise<SheetResponse<unknown>>>();
 
   constructor(webAppUrl: string) {
     this.webAppUrl = webAppUrl.trim();
@@ -25,8 +26,6 @@ export class SheetService {
   }
 
   private async sendMutation<T>(payload: object): Promise<T> {
-    // text/plain is a CORS-simple request. It works with both the active Version
-    // 5 deployment's doPost handler and the latest Code.gs deployment.
     const response = await fetch(this.webAppUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -36,38 +35,86 @@ export class SheetService {
     return this.readJson<T>(response);
   }
 
+  private async fetchWithTimeout(url: string, timeoutMs = 12000): Promise<Response> {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, {
+        cache: 'no-store',
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
   private async fetchData<T>(tab: string): Promise<SheetResponse<T>> {
-    // Fix: Remove the specific string literal comparison for webAppUrl.
-    // The App.tsx component now handles the initial URL configuration check.
     if (!this.webAppUrl) {
       return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     }
-    try {
-      const response = await fetch(`${this.webAppUrl}?tab=${tab}`);
-      const jsonResponse = await this.readJson<{ success: boolean; headers?: string[]; data?: string[][]; message?: string }>(response);
-      if (jsonResponse.success) {
-        // Map data from array of arrays to array of objects
-        const headers: string[] = jsonResponse.headers || [];
-        const data: string[][] = jsonResponse.data || [];
-        const typedData: T[] = data.map(row => {
-          const obj: { [key: string]: string } = {};
-          headers.forEach((header, index) => {
-            obj[this.toCamelCase(header)] = row[index];
+
+    const cacheKey = tab.toUpperCase();
+    const cached = this.readCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value as SheetResponse<T>;
+    }
+
+    const existingRequest = this.inFlightReads.get(cacheKey);
+    if (existingRequest) return existingRequest as Promise<SheetResponse<T>>;
+
+    const request = (async (): Promise<SheetResponse<T>> => {
+      let lastError: Error | null = null;
+
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const separator = this.webAppUrl.includes('?') ? '&' : '?';
+          const url = `${this.webAppUrl}${separator}tab=${encodeURIComponent(tab)}&_=${Date.now()}`;
+          const response = await this.fetchWithTimeout(url);
+          const jsonResponse = await this.readJson<{ success: boolean; headers?: string[]; data?: string[][]; message?: string }>(response);
+
+          if (!jsonResponse.success) {
+            throw new Error(jsonResponse.message || `Unable to load ${tab}.`);
+          }
+
+          const headers = jsonResponse.headers || [];
+          const data = jsonResponse.data || [];
+          const typedData: T[] = data.map(row => {
+            const obj: { [key: string]: string } = {};
+            headers.forEach((header, index) => {
+              obj[this.toCamelCase(header)] = row[index] ?? '';
+            });
+            return obj as T;
           });
-          return obj as T;
-        });
-        return { success: true, data: typedData };
-      } else {
-        return { success: false, message: jsonResponse.message || 'An unknown error occurred.' };
+
+          const result: SheetResponse<T> = { success: true, data: typedData };
+          this.readCache.set(cacheKey, { expiresAt: Date.now() + 30000, value: result });
+          return result;
+        } catch (error) {
+          lastError = error instanceof Error ? error : new Error(String(error));
+          if (attempt === 0) await new Promise(resolve => window.setTimeout(resolve, 900));
+        }
       }
-    } catch (error) {
-      console.error(`Error fetching data from ${tab}:`, error);
-      return { success: false, message: `Failed to fetch ${tab} data: ${(error as Error).message}` };
+
+      const stale = this.readCache.get(cacheKey);
+      if (stale) return stale.value as SheetResponse<T>;
+
+      console.error(`Error fetching data from ${tab}:`, lastError);
+      return {
+        success: false,
+        message: `Failed to fetch ${tab} data. The Google Sheet service may be waking up. Tap Retry in a moment. ${lastError?.message || ''}`.trim(),
+      };
+    })();
+
+    this.inFlightReads.set(cacheKey, request as Promise<SheetResponse<unknown>>);
+    try {
+      return await request;
+    } finally {
+      this.inFlightReads.delete(cacheKey);
     }
   }
 
   private toCamelCase(str: string): string {
-    // Normalize headers such as "Book ID" -> "bookId" and "Publication Year" -> "publicationYear".
     return str
       .trim()
       .toLowerCase()
@@ -87,25 +134,19 @@ export class SheetService {
   }
 
   async addBook(book: Book): Promise<{ success: boolean; message?: string }> {
-    if (!this.webAppUrl) {
-      return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
-    }
+    if (!this.webAppUrl) return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     try {
       return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'addBook', book });
     } catch (error) {
-      console.error('Error adding book:', error);
       return { success: false, message: `Failed to add book: ${(error as Error).message}` };
     }
   }
 
   async updateBookStatus(bookId: string, status: string): Promise<{ success: boolean; message?: string }> {
-    if (!this.webAppUrl) {
-      return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
-    }
+    if (!this.webAppUrl) return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     try {
       return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'updateBookStatus', bookId, status });
     } catch (error) {
-      console.error('Error updating book status:', error);
       return { success: false, message: `Failed to update status: ${(error as Error).message}` };
     }
   }
@@ -115,7 +156,6 @@ export class SheetService {
     try {
       return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'updateBook', bookId, book });
     } catch (error) {
-      console.error('Error editing book:', error);
       return { success: false, message: `Failed to edit book: ${(error as Error).message}` };
     }
   }
@@ -125,53 +165,42 @@ export class SheetService {
     try {
       return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'archiveBook', bookId, archived });
     } catch (error) {
-      console.error('Error archiving book:', error);
       return { success: false, message: `Failed to ${archived ? 'archive' : 'restore'} book: ${(error as Error).message}` };
     }
   }
 
   async addBorrower(name: string): Promise<{ success: boolean; message?: string }> {
-    // Fix: Remove the specific string literal comparison for webAppUrl.
-    // The App.tsx component now handles the initial URL configuration check.
-    if (!this.webAppUrl) {
-      return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
-    }
+    if (!this.webAppUrl) return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     try {
-      const jsonResponse = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'addBorrower', borrowerName: name });
-      return jsonResponse;
-
+      const result = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'addBorrower', borrowerName: name });
+      if (result.success) this.readCache.delete('BORROWERS');
+      return result;
     } catch (error) {
-      console.error('Error adding borrower:', error);
       return { success: false, message: `Failed to add borrower: ${(error as Error).message}` };
     }
   }
 
   async editBorrower(oldName: string, newName: string): Promise<{ success: boolean; message?: string }> {
-    if (!this.webAppUrl) {
-      return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
-    }
+    if (!this.webAppUrl) return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     try {
-      const jsonResponse = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'editBorrower', oldName, newName });
-      return jsonResponse;
-
+      const result = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'editBorrower', oldName, newName });
+      if (result.success) this.readCache.delete('BORROWERS');
+      return result;
     } catch (error) {
-      console.error('Error editing borrower:', error);
       return { success: false, message: `Failed to edit borrower: ${(error as Error).message}` };
     }
   }
 
   async scanBook(bookId: string, borrower: string, dueDays: number, operation: 'checkout' | 'return'): Promise<ScanResponse> {
-    // Fix: Remove the specific string literal comparison for webAppUrl.
-    // The App.tsx component now handles the initial URL configuration check.
-    if (!this.webAppUrl) {
-      return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
-    }
+    if (!this.webAppUrl) return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     try {
-      const jsonResponse = await this.sendMutation<ScanResponse>({ bookId, borrower, dueDays, operation });
-      return jsonResponse;
-
+      const result = await this.sendMutation<ScanResponse>({ bookId, borrower, dueDays, operation });
+      if (result.success) {
+        this.readCache.delete('LIBRARY');
+        this.readCache.delete('CHECKOUT LOG');
+      }
+      return result;
     } catch (error) {
-      console.error('Error scanning book:', error);
       return { success: false, message: `Failed to process scan: ${(error as Error).message}` };
     }
   }
