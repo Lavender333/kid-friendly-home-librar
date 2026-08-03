@@ -16,7 +16,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   const [operation, setOperation] = useState<'checkout' | 'return'>('checkout');
   const [lastReceipt, setLastReceipt] = useState<ScanResponse | null>(null);
   const [stationMessage, setStationMessage] = useState('Choose a mode, then scan.');
-  const [showCards, setShowCards] = useState(false);
+  const [showCards, setShowCards] = useState(() => window.location.hash.includes('/library-cards'));
   const inputRef = useRef<HTMLInputElement>(null);
   const cardsRef = useRef<HTMLElement>(null);
 
@@ -35,12 +35,15 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   }, [focusScanner]);
 
   useEffect(() => {
-    const openCards = () => {
-      setShowCards(true);
-      window.setTimeout(() => cardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    const openCardsFromRoute = () => {
+      if (window.location.hash.includes('/library-cards')) {
+        setShowCards(true);
+        window.setTimeout(() => cardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+      }
     };
-    window.addEventListener('open-library-cards', openCards);
-    return () => window.removeEventListener('open-library-cards', openCards);
+    openCardsFromRoute();
+    window.addEventListener('hashchange', openCardsFromRoute);
+    return () => window.removeEventListener('hashchange', openCardsFromRoute);
   }, []);
 
   const switchMode = (next: 'checkout' | 'return') => {
@@ -154,23 +157,27 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
       </button>
 
       {showCards && (
-        <section ref={cardsRef} id="library-cards" className="mt-4 scroll-mt-36 space-y-4">
-          <h2 className="text-center text-2xl font-bold">Make & Print Library Cards</h2>
+        <section ref={cardsRef} className="mt-4 space-y-4" aria-label="Library card maker">
           <p className="text-center text-sm">Print each card, then scan it before checking out books.</p>
-          {borrowers.length === 0 && (
-            <p className="rounded-lg bg-white p-4 text-center font-semibold">Add borrowers first under Manage Borrowers.</p>
+          {borrowers.length === 0 ? (
+            <p className="rounded-lg bg-white p-4 text-center font-semibold">Add a borrower first, then return here to print a card.</p>
+          ) : (
+            <div className="printable-library-cards">
+              {borrowers.map(name => (
+                <article key={name} className="printable-library-card rounded-xl bg-white p-5 text-center shadow">
+                  <p className="text-sm font-semibold uppercase tracking-wide">Mariah's Library</p>
+                  <h3 className="my-2 text-2xl font-bold">{name}</h3>
+                  <p className="mb-3">Library Member</p>
+                  <Barcode value={memberCode(name)} className="mx-auto max-w-full" />
+                  <p className="mt-2 font-mono text-sm">{memberCode(name)}</p>
+                </article>
+              ))}
+            </div>
           )}
-          {borrowers.map(name => (
-            <article key={name} className="rounded-xl bg-white p-5 text-center shadow">
-              <p className="text-sm font-semibold uppercase tracking-wide">Mariah's Library</p>
-              <h3 className="my-2 text-2xl font-bold">{name}</h3>
-              <p className="mb-3">Library Member</p>
-              <Barcode value={memberCode(name)} className="mx-auto max-w-full" />
-              <p className="mt-2 font-mono text-sm">{memberCode(name)}</p>
-            </article>
-          ))}
           {borrowers.length > 0 && (
-            <button type="button" onClick={() => window.print()} className="w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">Print Library Cards</button>
+            <button type="button" onClick={() => window.print()} className="print-button-only w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">
+              Print Library Cards
+            </button>
           )}
         </section>
       )}
