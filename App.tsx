@@ -134,8 +134,6 @@ const App: React.FC = () => {
   }, [sheetService, checkWebAppUrl]);
 
   const handleCheckInFromLog = React.useCallback(async (bookId: string, borrower: string) => {
-    // Version 5 requires a non-empty borrower even for returns. The server still
-    // records the borrower stored on the checked-out book as the authoritative value.
     const response = await handleScan(bookId, borrower || 'Check In', 14, 'return');
     if (response.success) void fetchCheckoutLogData(true);
     return response;
@@ -146,12 +144,36 @@ const App: React.FC = () => {
     setIsLoading(true);
     try {
       const response = await sheetService.addBook(book);
-      setMessage({ text: response.message || (response.success ? 'Book saved.' : 'Failed to save book.'), type: response.success ? 'success' : 'error' });
+      setMessage({ text: response.message || (response.success ? 'Book saved and added to Library.' : 'Failed to save book.'), type: response.success ? 'success' : 'error' });
+
+      if (response.success) {
+        const canonicalId = response.bookId || response.barcode || book.bookId;
+        const canonicalBarcode = response.barcode || canonicalId;
+        const savedBook: Book = {
+          ...book,
+          bookId: canonicalId,
+          barcode: canonicalBarcode,
+          status: 'On Shelf',
+          borrower: '',
+          checkoutDate: '',
+          dueDate: '',
+        };
+
+        setLibraryData(current => {
+          const withoutDuplicate = current.filter(item => item.bookId !== canonicalId && item.barcode !== canonicalBarcode);
+          const updated = [savedBook, ...withoutDuplicate];
+          writeCache(LIBRARY_CACHE_KEY, updated);
+          return updated;
+        });
+
+        window.setTimeout(() => void fetchLibraryData(true), 500);
+      }
+
       return response;
     } finally {
       setIsLoading(false);
     }
-  }, [sheetService, checkWebAppUrl]);
+  }, [sheetService, checkWebAppUrl, fetchLibraryData]);
 
   const handleUpdateBookStatus = React.useCallback(async (bookId: string, status: string) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
@@ -270,9 +292,6 @@ const App: React.FC = () => {
     } else if (location.pathname === '/checkout-log') {
       fetchCheckoutLogData(logData.length > 0);
     } else if (location.pathname === '/') {
-      // Warm the other screens while the user is at Scan Station. Apps Script
-      // can take about two seconds on its first request, so prefetching here
-      // makes Library and Checkout Log ready before their buttons are tapped.
       fetchBorrowersData(true);
       fetchLibraryData(true);
       fetchCheckoutLogData(true);
@@ -305,10 +324,8 @@ const App: React.FC = () => {
       <div className="w-full max-w-4xl bg-white p-6 rounded-lg shadow-xl relative mt-4">
         <Navigation navigate={navigate} />
 
-        {/* Scan Station has no page-level loader, so show one only there. */}
         {isLoading && location.pathname === '/' && <LoadingSpinner />}
 
-        {/* Global message/toast display */}
         {message.text && (
           <div role="alert" aria-live="polite" className={`fixed top-4 left-1/2 -translate-x-1/2 p-3 rounded-lg shadow-md z-50 text-white text-center
             ${message.type === 'success' ? 'bg-success-green' : 'bg-error-red'}`}
