@@ -34,6 +34,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   const switchMode = (next: 'checkout' | 'return') => {
     setOperation(next);
     setScanValue('');
+    setLastReceipt(null);
     setStationMessage(next === 'checkout'
       ? 'Scan a library card, then scan one or more books.'
       : 'Scan each returned book. No library card is needed.');
@@ -68,7 +69,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
     if (result.success) {
       setLastReceipt(result);
       setStationMessage(operation === 'checkout'
-        ? `✓ ${result.title} checked out to ${result.borrower}. Scan the next book.`
+        ? `✓ ${result.title} checked out to ${result.borrower}. Print the receipt or scan the next book.`
         : `✓ ${result.title} checked in. Scan the next returned book.`);
     } else {
       setStationMessage(result.message || 'The scan could not be completed.');
@@ -80,6 +81,25 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     void processScan(scanValue);
+  };
+
+  const printMunbynReceipt = () => {
+    const style = document.createElement('style');
+    style.id = 'munbyn-receipt-page-size';
+    style.textContent = '@page { size: 100mm 152mm; margin: 0; }';
+    document.head.appendChild(style);
+    document.body.classList.add('print-munbyn-receipt');
+
+    const cleanup = () => {
+      document.body.classList.remove('print-munbyn-receipt');
+      document.getElementById('munbyn-receipt-page-size')?.remove();
+      window.removeEventListener('afterprint', cleanup);
+      requestAnimationFrame(focusScanner);
+    };
+
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+    window.setTimeout(cleanup, 3000);
   };
 
   return (
@@ -140,24 +160,36 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
       {lastReceipt?.success && (
         <div className="mt-6 rounded-xl border-2 border-primary-green bg-white p-4 text-center">
           <p className="text-xl font-bold">{lastReceipt.action} complete!</p>
-          <p>{lastReceipt.title}</p>
-          <p className="font-mono">{lastReceipt.bookId}</p>
-          <button type="button" onClick={() => window.print()} className="mt-3 w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">Print Receipt</button>
+          <p className="mt-1 font-semibold">{lastReceipt.title}</p>
+          <p className="font-mono text-sm">{lastReceipt.bookId}</p>
+          {lastReceipt.action === 'Checkout' && (
+            <>
+              <p className="mt-2 text-sm">Borrower: <strong>{lastReceipt.borrower}</strong></p>
+              <p className="text-sm">Due: <strong>{lastReceipt.dueDate}</strong></p>
+              <button type="button" onClick={printMunbynReceipt} className="mt-3 w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">
+                Print MUNBYN Checkout Receipt
+              </button>
+              <p className="mt-2 text-xs text-gray-500">Sized for a 100 mm × 152 mm thermal label.</p>
+            </>
+          )}
         </div>
       )}
 
-      {lastReceipt?.success && (
-        <section className="thermal-receipt" aria-label="Thermal receipt">
+      {lastReceipt?.success && lastReceipt.action === 'Checkout' && (
+        <section className="thermal-receipt munbyn-checkout-receipt" aria-label="Checkout receipt">
           <h1>Mariah's Library</h1>
+          <p className="receipt-subtitle">CHECKOUT RECEIPT</p>
           <div className="receipt-rule" />
-          <h2>{lastReceipt.action} Receipt</h2>
-          <p><strong>Book:</strong> {lastReceipt.title}</p>
-          <p><strong>Book ID:</strong> {lastReceipt.bookId}</p>
-          <p><strong>Borrower:</strong> {lastReceipt.borrower}</p>
-          {lastReceipt.action === 'Checkout' && <p><strong>Due:</strong> {lastReceipt.dueDate}</p>}
-          <p><strong>Date:</strong> {lastReceipt.timestamp || new Date().toLocaleString()}</p>
+          <div className="receipt-book-title">{lastReceipt.title}</div>
+          <div className="receipt-details">
+            <p><strong>Borrower</strong><br />{lastReceipt.borrower}</p>
+            <p><strong>Book ID</strong><br /><span className="receipt-mono">{lastReceipt.bookId}</span></p>
+            <p><strong>Checked out</strong><br />{lastReceipt.timestamp || new Date().toLocaleString()}</p>
+            <p><strong>Due date</strong><br /><span className="receipt-due-date">{lastReceipt.dueDate}</span></p>
+          </div>
           <div className="receipt-rule" />
-          <p className="receipt-thanks">Happy reading!</p>
+          <p className="receipt-reminder">Please return this book by the due date.</p>
+          <p className="receipt-thanks">Happy reading! 📚</p>
         </section>
       )}
     </div>
