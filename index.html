@@ -20,8 +20,88 @@
 <style>
   .thermal-receipt { display: none; }
 
+  .printable-library-cards {
+    display: grid;
+    gap: 1rem;
+  }
+
+  .printable-library-card {
+    position: relative;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 230px;
+    overflow: hidden;
+    border: 3px solid #22333b;
+    border-radius: 22px;
+    padding: 18px;
+    color: #22333b;
+    background: linear-gradient(135deg, #fff4b8 0%, #ffd6e7 52%, #cdefff 100%);
+    box-shadow: 0 10px 24px rgba(34, 51, 59, .14);
+  }
+
+  .library-card-theme-1 { background: linear-gradient(135deg, #d9f8e8 0%, #d8e9ff 52%, #f5d8ff 100%); }
+  .library-card-theme-2 { background: linear-gradient(135deg, #ffe8c7 0%, #fff6b7 48%, #d7f5ee 100%); }
+
+  .library-card-decor {
+    position: absolute;
+    border-radius: 999px;
+    opacity: .35;
+    pointer-events: none;
+  }
+
+  .library-card-decor-one { width: 90px; height: 90px; right: -28px; top: -30px; background: #ff8ab6; }
+  .library-card-decor-two { width: 62px; height: 62px; left: -22px; bottom: -22px; background: #67c5ff; }
+
+  .library-card-header,
+  .library-card-member-row,
+  .library-card-footer {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .library-card-header { margin-bottom: 10px; }
+  .library-card-icon { font-size: 34px; line-height: 1; }
+  .library-card-library-name { margin: 0; font-size: 18px; font-weight: 900; }
+  .library-card-tagline { margin: 1px 0 0; font-size: 11px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
+  .library-card-label { margin: 0; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+  .library-card-member-name { margin: 1px 0 0; font-size: 24px; line-height: 1.05; font-weight: 900; }
+
+  .library-card-badge {
+    flex: 0 0 auto;
+    border: 2px solid #22333b;
+    border-radius: 999px;
+    padding: 7px 11px;
+    background: rgba(255,255,255,.78);
+    font-size: 9px;
+    line-height: 1.05;
+    font-weight: 900;
+    text-align: center;
+  }
+
+  .library-card-barcode-panel {
+    position: relative;
+    z-index: 1;
+    margin-top: 10px;
+    border: 2px solid rgba(34,51,59,.3);
+    border-radius: 12px;
+    padding: 7px 10px 5px;
+    background: #fff;
+    text-align: center;
+  }
+
+  .library-card-barcode { display: block; margin: 0 auto; max-width: 100%; }
+  .library-card-member-code { margin: 2px 0 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; font-weight: 800; }
+  .library-card-footer { margin-top: 7px; font-size: 10px; font-weight: 800; }
+  .library-card-stars { letter-spacing: .1em; }
+
   @media print {
-    body { background: white !important; }
+    @page { size: letter portrait; margin: .35in; }
+    html, body { width: 100%; min-height: 100%; background: white !important; }
+    body { margin: 0 !important; }
     body * { visibility: hidden !important; }
 
     .thermal-receipt,
@@ -54,12 +134,13 @@
     .printable-library-cards {
       display: grid !important;
       grid-template-columns: repeat(2, 3.375in);
-      gap: .25in;
+      grid-auto-rows: 2.125in;
+      gap: .22in;
       position: absolute;
       top: 0;
       left: 0;
-      width: 7.25in;
-      padding: .25in;
+      width: 6.97in;
+      padding: 0;
       background: #fff;
     }
 
@@ -67,22 +148,31 @@
       box-sizing: border-box;
       width: 3.375in;
       height: 2.125in;
+      min-height: 0;
       overflow: hidden;
       break-inside: avoid;
       page-break-inside: avoid;
-      border: 2px solid #000 !important;
-      border-radius: .12in;
-      padding: .16in !important;
-      color: #000 !important;
-      background: #fff !important;
+      border: 2px solid #22333b !important;
+      border-radius: .16in;
+      padding: .12in !important;
+      color: #22333b !important;
       box-shadow: none !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
     }
 
-    .printable-library-card svg {
-      max-width: 2.9in !important;
-      height: .68in !important;
-    }
-
+    .library-card-header { margin-bottom: .04in; gap: .06in; }
+    .library-card-icon { font-size: 19pt; }
+    .library-card-library-name { font-size: 11.5pt; line-height: 1; }
+    .library-card-tagline { font-size: 6.5pt; }
+    .library-card-label { font-size: 6.2pt; }
+    .library-card-member-name { font-size: 15.5pt; line-height: 1; }
+    .library-card-badge { padding: .035in .07in; border-width: 1.5px; font-size: 5.7pt; }
+    .library-card-barcode-panel { margin-top: .045in; padding: .035in .07in .025in; border-radius: .08in; }
+    .printable-library-card svg { display: block !important; max-width: 2.95in !important; height: .55in !important; margin: 0 auto !important; }
+    .library-card-member-code { margin-top: 0; font-size: 6.3pt; line-height: 1; }
+    .library-card-footer { margin-top: .035in; font-size: 6pt; line-height: 1.1; }
+    .library-card-stars { font-size: 5.5pt; }
     .print-button-only { display: none !important; }
   }
 </style>
