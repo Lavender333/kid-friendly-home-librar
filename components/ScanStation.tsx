@@ -18,6 +18,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   const [stationMessage, setStationMessage] = useState('Choose a mode, then scan.');
   const [showCards, setShowCards] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const cardsRef = useRef<HTMLElement>(null);
 
   const focusScanner = React.useCallback(() => inputRef.current?.focus({ preventScroll: true }), []);
 
@@ -32,6 +33,15 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
     window.addEventListener('focus', refocus);
     return () => window.removeEventListener('focus', refocus);
   }, [focusScanner]);
+
+  useEffect(() => {
+    const openCards = () => {
+      setShowCards(true);
+      window.setTimeout(() => cardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+    };
+    window.addEventListener('open-library-cards', openCards);
+    return () => window.removeEventListener('open-library-cards', openCards);
+  }, []);
 
   const switchMode = (next: 'checkout' | 'return') => {
     setOperation(next);
@@ -144,8 +154,12 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
       </button>
 
       {showCards && (
-        <section className="mt-4 space-y-4">
+        <section ref={cardsRef} id="library-cards" className="mt-4 scroll-mt-36 space-y-4">
+          <h2 className="text-center text-2xl font-bold">Make & Print Library Cards</h2>
           <p className="text-center text-sm">Print each card, then scan it before checking out books.</p>
+          {borrowers.length === 0 && (
+            <p className="rounded-lg bg-white p-4 text-center font-semibold">Add borrowers first under Manage Borrowers.</p>
+          )}
           {borrowers.map(name => (
             <article key={name} className="rounded-xl bg-white p-5 text-center shadow">
               <p className="text-sm font-semibold uppercase tracking-wide">Mariah's Library</p>
@@ -155,7 +169,9 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
               <p className="mt-2 font-mono text-sm">{memberCode(name)}</p>
             </article>
           ))}
-          <button type="button" onClick={() => window.print()} className="w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">Print Library Cards</button>
+          {borrowers.length > 0 && (
+            <button type="button" onClick={() => window.print()} className="w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">Print Library Cards</button>
+          )}
         </section>
       )}
 
