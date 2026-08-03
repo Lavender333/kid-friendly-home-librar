@@ -1,7 +1,12 @@
-# Kid-Friendly Home Library
+# Mariah's Library
 
 A React frontend hosted on GitHub Pages with a Google Sheet and Google Apps
 Script web app as its backend.
+
+The site is installable on an iPad Home Screen, keeps its interface available
+offline, and prompts when a new version is ready. Archiving is a reversible
+soft-delete: archived books keep their Book ID and checkout history and can be
+restored from the Library screen.
 
 ## Required Google Sheet tabs
 
@@ -26,8 +31,10 @@ Names, spelling, and spaces must match exactly. Put the headers in row 1.
 
 Whenever `Code.gs` changes, use **Deploy → Manage deployments → Edit**, choose
 **New version**, and deploy again. Saving code alone does not update a deployment.
+After deployment, open `<your /exec URL>?health=1`; the current backend returns
+JSON identifying **Mariah's Library** and backend version **8**.
 
-The production URL in `App.tsx` points to the verified Mariahs Library backend.
+The production URL in `App.tsx` points to the verified Mariah's Library backend.
 When deploying a replacement Apps Script version under a new URL, update that
 value and verify all three tab endpoints before publishing the frontend.
 
