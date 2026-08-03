@@ -35,6 +35,13 @@ export class SheetService {
     return this.readJson<T>(response);
   }
 
+  private async sendMutationByGet<T>(payload: object): Promise<T> {
+    const separator = this.webAppUrl.includes('?') ? '&' : '?';
+    const url = `${this.webAppUrl}${separator}request=${encodeURIComponent(JSON.stringify(payload))}&_=${Date.now()}`;
+    const response = await this.fetchWithTimeout(url);
+    return this.readJson<T>(response);
+  }
+
   private async fetchWithTimeout(url: string, timeoutMs = 12000): Promise<Response> {
     const controller = new AbortController();
     const timer = window.setTimeout(() => controller.abort(), timeoutMs);
@@ -135,15 +142,34 @@ export class SheetService {
 
   async addBook(book: Book): Promise<{ success: boolean; message?: string }> {
     if (!this.webAppUrl) return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
+
+    const payload = {
+      action: 'addBook',
+      ...book,
+      book,
+    };
+
     try {
-      // Support both Apps Script payload formats: older deployments expect the
-      // book fields at the top level, while newer deployments read payload.book.
-      const result = await this.sendMutation<{ success: boolean; message?: string }>({
-        action: 'addBook',
-        ...book,
-        book,
-      });
-      if (result.success) this.readCache.delete('LIBRARY');
+      let result = await this.sendMutation<{ success: boolean; message?: string }>(payload);
+
+      // Some Apps Script deployments mishandle POST payload routing. Retry the
+      // same addBook action through doGet before declaring the backend outdated.
+      if (!result.success && /borrower is required|book id is required/i.test(result.message || '')) {
+        result = await this.sendMutationByGet<{ success: boolean; message?: string }>(payload);
+      }
+
+      if (result.success) {
+        this.readCache.delete('LIBRARY');
+        return result;
+      }
+
+      if (/borrower is required/i.test(result.message || '')) {
+        return {
+          success: false,
+          message: 'Adding a book does not require a borrower. The live Google Apps Script deployment is outdated and must be redeployed from the current Code.gs file.',
+        };
+      }
+
       return result;
     } catch (error) {
       return { success: false, message: `Failed to add book: ${(error as Error).message}` };
