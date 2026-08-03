@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface NavigationProps {
@@ -13,9 +12,18 @@ const Navigation: React.FC<NavigationProps> = ({ navigate }) => {
     navigate(path);
   };
 
+  const openLibraryCards = () => {
+    setActiveTab('/library-cards');
+    navigate('/');
+    window.setTimeout(() => {
+      window.dispatchEvent(new CustomEvent('open-library-cards'));
+    }, 50);
+  };
+
   React.useEffect(() => {
     const handleHashChange = () => {
-      setActiveTab(window.location.hash.substring(1) || '/');
+      const next = window.location.hash.substring(1) || '/';
+      if (next !== '/') setActiveTab(next);
     };
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
@@ -37,6 +45,9 @@ const Navigation: React.FC<NavigationProps> = ({ navigate }) => {
       </button>
       <button onClick={() => handleNavClick('/add-book')} className={getTabClasses('/add-book')}>
         Add Book
+      </button>
+      <button onClick={openLibraryCards} className={getTabClasses('/library-cards')}>
+        Library Cards
       </button>
       <button onClick={() => handleNavClick('/checkout-log')} className={getTabClasses('/checkout-log')}>
         Checkout Log
