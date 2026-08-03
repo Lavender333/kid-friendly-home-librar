@@ -174,7 +174,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
       )}
       {lastReceipt?.success && (
         <section className="thermal-receipt" aria-label="Thermal receipt">
-          <h1>Mariahs Library</h1>
+          <h1>Mariah's Library</h1>
           <div className="receipt-rule" />
           <h2>{lastReceipt.action} Receipt</h2>
           <p><strong>Book:</strong> {lastReceipt.title}</p>

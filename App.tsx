@@ -40,6 +40,7 @@ const App: React.FC = () => {
   const [logData, setLogData] = useState<LogEntry[]>(() => readCache<LogEntry>(LOG_CACHE_KEY));
   const [borrowersList, setBorrowersList] = useState<Borrower[]>(() => readCache<Borrower>(BORROWERS_CACHE_KEY));
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [updateApp, setUpdateApp] = useState<((reloadPage?: boolean) => Promise<void>) | null>(null);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' | '' }>({ text: '', type: '' });
   const navigate = useNavigate();
   const location = useLocation();
@@ -173,6 +174,46 @@ const App: React.FC = () => {
     }
   }, [sheetService, checkWebAppUrl]);
 
+  const handleEditBook = React.useCallback(async (bookId: string, book: Book) => {
+    if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
+    setIsLoading(true);
+    try {
+      const response = await sheetService.updateBook(bookId, book);
+      setMessage({ text: response.message || (response.success ? 'Book updated.' : 'Book update failed.'), type: response.success ? 'success' : 'error' });
+      if (response.success) {
+        setLibraryData(current => {
+          const updated = current.map(item => item.bookId === bookId ? { ...item, ...book, bookId } : item);
+          writeCache(LIBRARY_CACHE_KEY, updated);
+          return updated;
+        });
+      }
+      return response;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sheetService, checkWebAppUrl]);
+
+  const handleArchiveBook = React.useCallback(async (bookId: string, archived: boolean) => {
+    if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
+    setIsLoading(true);
+    try {
+      const response = await sheetService.archiveBook(bookId, archived);
+      setMessage({ text: response.message || (response.success ? (archived ? 'Book archived.' : 'Book restored.') : 'Book update failed.'), type: response.success ? 'success' : 'error' });
+      if (response.success) {
+        setLibraryData(current => {
+          const updated = current.map(book => book.bookId === bookId
+            ? { ...book, status: archived ? 'Archived' : 'On Shelf', borrower: '', checkoutDate: '', dueDate: '' }
+            : book);
+          writeCache(LIBRARY_CACHE_KEY, updated);
+          return updated;
+        });
+      }
+      return response;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [sheetService, checkWebAppUrl]);
+
   const handleAddNewBorrower = React.useCallback(async (name: string) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
     setIsLoading(true);
@@ -241,6 +282,15 @@ const App: React.FC = () => {
   }, [location.pathname, fetchLibraryData, fetchCheckoutLogData, fetchBorrowersData]);
 
   React.useEffect(() => {
+    const handleUpdate = (event: Event) => {
+      const updater = (event as CustomEvent<(reloadPage?: boolean) => Promise<void>>).detail;
+      setUpdateApp(() => updater);
+    };
+    window.addEventListener('mariahs-library-update', handleUpdate);
+    return () => window.removeEventListener('mariahs-library-update', handleUpdate);
+  }, []);
+
+  React.useEffect(() => {
     if (message.text) {
       const timer = setTimeout(() => setMessage({ text: '', type: '' }), 5000);
       return () => clearTimeout(timer);
@@ -267,10 +317,24 @@ const App: React.FC = () => {
           </div>
         )}
 
+        {updateApp && (
+          <div role="status" className="fixed bottom-4 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 rounded-xl bg-text-dark p-4 text-center text-white shadow-2xl">
+            <p className="mb-3 font-bold">A new version of Mariah's Library is ready.</p>
+            <div className="flex justify-center gap-3">
+              <button type="button" onClick={() => updateApp(true)} className="rounded-lg bg-primary-green px-4 py-2 font-bold text-text-dark">
+                Update Now
+              </button>
+              <button type="button" onClick={() => setUpdateApp(null)} className="rounded-lg bg-white/20 px-4 py-2 font-semibold">
+                Later
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="mt-6">
           <Routes>
             <Route path="/" element={<ScanStation onScan={handleScan} borrowers={borrowerNames} />} />
-            <Route path="/library" element={<LibraryView books={libraryData} isLoading={isLoading} onUpdateStatus={handleUpdateBookStatus} />} />
+            <Route path="/library" element={<LibraryView books={libraryData} isLoading={isLoading} onUpdateStatus={handleUpdateBookStatus} onEditBook={handleEditBook} onArchiveBook={handleArchiveBook} />} />
             <Route path="/add-book" element={<AddBookView onAddBook={handleAddBook} isLoading={isLoading} />} />
             <Route path="/checkout-log" element={<CheckoutLogView logEntries={logData} isLoading={isLoading} onCheckIn={handleCheckInFromLog} />} />
             <Route

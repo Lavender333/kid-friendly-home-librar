@@ -35,6 +35,7 @@ const TAB_LIBRARY = "LIBRARY";
 const TAB_LOG = "CHECKOUT LOG";
 const TAB_BORROWERS = "BORROWERS"; // New constant for borrowers tab
 const SPREADSHEET_ID = "1rRO12mPbnNFE12G3c3hL_VlbHsrUSQeO";
+const BACKEND_VERSION = "8";
 
 function getLibrarySpreadsheet() {
   return SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -78,6 +79,13 @@ function setCorsHeaders(response) {
  * Handles GET requests from the web app for fetching data from various tabs.
  */
 function doGet(e) {
+  if (e.parameter.health === "1") {
+    return ContentService.createTextOutput(JSON.stringify({
+      success: true,
+      app: "Mariah's Library",
+      version: BACKEND_VERSION
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
   if (e.parameter.request) {
     try {
       return handleMutation(JSON.parse(e.parameter.request));
@@ -202,6 +210,90 @@ function handleMutation(request) {
       log.appendRow([new Date(), bookId, title, existingBorrower, `Status → ${newStatus}`, 'Manual status update']);
       return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Updated '${title}' to ${newStatus}.` }))
         .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (request.action === 'updateBook') {
+      const bookId = String(request.bookId || '').trim();
+      const book = request.book || {};
+      const title = String(book.title || '').trim();
+      const barcode = String(book.barcode || bookId).trim();
+      if (!bookId || !title) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Book ID and title are required.' }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const lib = ss.getSheetByName(TAB_LIBRARY);
+      const log = ss.getSheetByName(TAB_LOG);
+      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
+      if (!log) throw new Error(`Tab not found: ${TAB_LOG}`);
+      const lastRow = lib.getLastRow();
+      const ids = lastRow > 1 ? lib.getRange(2, COL_BOOK_ID_IDX + 1, lastRow - 1, 1).getDisplayValues() : [];
+      const matchIndex = ids.findIndex(row => String(row[0]).trim() === bookId);
+      if (matchIndex === -1) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Book ID not found: ${bookId}` }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const sheetRow = matchIndex + 2;
+      if (lastRow > 1) {
+        const barcodes = lib.getRange(2, COL_BARCODE_IDX + 1, lastRow - 1, 1).getDisplayValues();
+        const duplicateBarcode = barcodes.some((row, index) => index !== matchIndex && String(row[0]).trim() === barcode);
+        if (duplicateBarcode) {
+          return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Barcode already belongs to another book: ${barcode}` }))
+            .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+
+      const rowValues = lib.getRange(sheetRow, 1, 1, 12).getValues()[0];
+      rowValues[COL_BARCODE_IDX] = barcode;
+      rowValues[COL_TITLE_IDX] = title;
+      rowValues[COL_AUTHOR_IDX] = String(book.author || '').trim();
+      rowValues[COL_PUBLISHER_IDX] = String(book.publisher || '').trim();
+      rowValues[COL_PUB_YEAR_IDX] = String(book.publicationYear || '').trim();
+      rowValues[COL_GENRE_IDX] = String(book.genre || '').trim();
+      rowValues[COL_NOTES_IDX] = String(book.notes || '').trim();
+      lib.getRange(sheetRow, 1, 1, 12).setValues([rowValues]);
+      log.appendRow([new Date(), bookId, title, String(rowValues[COL_BORROWER_IDX] || ''), 'Edited', 'Book details updated']);
+      return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Updated '${title}'.` }))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (request.action === 'archiveBook') {
+      const bookId = String(request.bookId || '').trim();
+      const archive = request.archived !== false;
+      if (!bookId) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Book ID is required.' }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const lib = ss.getSheetByName(TAB_LIBRARY);
+      const log = ss.getSheetByName(TAB_LOG);
+      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
+      if (!log) throw new Error(`Tab not found: ${TAB_LOG}`);
+      const lastRow = lib.getLastRow();
+      const ids = lastRow > 1 ? lib.getRange(2, COL_BOOK_ID_IDX + 1, lastRow - 1, 1).getDisplayValues() : [];
+      const matchIndex = ids.findIndex(row => String(row[0]).trim() === bookId);
+      if (matchIndex === -1) {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Book ID not found: ${bookId}` }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const sheetRow = matchIndex + 2;
+      const title = String(lib.getRange(sheetRow, COL_TITLE_IDX + 1).getDisplayValue()).trim();
+      const currentStatus = String(lib.getRange(sheetRow, COL_STATUS_IDX + 1).getDisplayValue()).trim() || 'On Shelf';
+      if (archive && currentStatus === 'Checked Out') {
+        return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Check in '${title}' before archiving it.` }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+
+      const newStatus = archive ? 'Archived' : 'On Shelf';
+      lib.getRange(sheetRow, COL_STATUS_IDX + 1).setValue(newStatus);
+      lib.getRange(sheetRow, COL_BORROWER_IDX + 1, 1, 3).clearContent();
+      log.appendRow([new Date(), bookId, title, '', archive ? 'Archived' : 'Restored', 'Book record retained']);
+      return ContentService.createTextOutput(JSON.stringify({
+        success: true,
+        message: archive ? `Archived '${title}'.` : `Restored '${title}' to the shelf.`
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
     if (request.action === 'addBook') {
