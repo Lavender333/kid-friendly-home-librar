@@ -13,19 +13,24 @@
     <link rel="icon" href="/kid-friendly-home-librar/icons/mariahs-library.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" sizes="180x180" href="/kid-friendly-home-librar/icons/apple-touch-icon.png">
     <script>
-      // The source file cannot run directly from Finder. Send accidental local
-      // opens to the installed website instead of leaving a blank/loading page.
       if (window.location.protocol === 'file:') {
         window.location.replace('https://lavender333.github.io/kid-friendly-home-librar/');
       }
     </script>
 <style>
   .thermal-receipt { display: none; }
+
   @media print {
-    @page { size: 4in 6in; margin: 0; }
     body { background: white !important; }
     body * { visibility: hidden !important; }
-    .thermal-receipt, .thermal-receipt * { visibility: visible !important; }
+
+    .thermal-receipt,
+    .thermal-receipt *,
+    .printable-library-cards,
+    .printable-library-cards * {
+      visibility: visible !important;
+    }
+
     .thermal-receipt {
       display: block !important;
       position: absolute;
@@ -40,10 +45,45 @@
       font-size: 15pt;
       line-height: 1.35;
     }
+
     .thermal-receipt h1 { margin: 0; text-align: center; font-size: 25pt; }
     .thermal-receipt h2 { text-align: center; font-size: 20pt; }
     .receipt-rule { margin: .2in 0; border-top: 3px solid #000; }
     .receipt-thanks { margin-top: .35in; text-align: center; font-size: 18pt; font-weight: bold; }
+
+    .printable-library-cards {
+      display: grid !important;
+      grid-template-columns: repeat(2, 3.375in);
+      gap: .25in;
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 7.25in;
+      padding: .25in;
+      background: #fff;
+    }
+
+    .printable-library-card {
+      box-sizing: border-box;
+      width: 3.375in;
+      height: 2.125in;
+      overflow: hidden;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      border: 2px solid #000 !important;
+      border-radius: .12in;
+      padding: .16in !important;
+      color: #000 !important;
+      background: #fff !important;
+      box-shadow: none !important;
+    }
+
+    .printable-library-card svg {
+      max-width: 2.9in !important;
+      height: .68in !important;
+    }
+
+    .print-button-only { display: none !important; }
   }
 </style>
 </head>
