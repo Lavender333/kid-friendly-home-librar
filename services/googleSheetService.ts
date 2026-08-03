@@ -1,6 +1,7 @@
 import { AddBookResponse, Book, Borrower, LogEntry, ScanResponse, SheetResponse } from '../types';
 
 const CHECKOUT_LOG_HEADERS = ['Checkout Date','Book ID','Title','Borrower','Action','Due Date','Return Date','Days Late','Notes'];
+type MutationResult = { success: boolean; message?: string };
 
 export class SheetService {
   private webAppUrl: string;
@@ -20,14 +21,42 @@ export class SheetService {
   }
 
   private async sendMutation<T>(payload: object): Promise<T> {
-    const response = await fetch(this.webAppUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload), cache: 'no-store' });
+    const response = await fetch(this.webAppUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload),
+      cache: 'no-store',
+      redirect: 'follow',
+    });
     return this.readJson<T>(response);
   }
 
   private async sendMutationByGet<T>(payload: object): Promise<T> {
     const separator = this.webAppUrl.includes('?') ? '&' : '?';
-    const response = await fetch(`${this.webAppUrl}${separator}request=${encodeURIComponent(JSON.stringify(payload))}&_=${Date.now()}`, { cache: 'no-store', redirect: 'follow' });
+    const response = await fetch(`${this.webAppUrl}${separator}request=${encodeURIComponent(JSON.stringify(payload))}&_=${Date.now()}`, {
+      cache: 'no-store',
+      redirect: 'follow',
+    });
     return this.readJson<T>(response);
+  }
+
+  private async mutateWithFallback<T extends MutationResult>(payload: object, actionLabel: string): Promise<T> {
+    let postError: Error | null = null;
+    try {
+      const result = await this.sendMutation<T>(payload);
+      if (result.success) return result;
+      const message = result.message || '';
+      if (!/invalid|unknown|unsupported|borrower.*required|choose check out|book id is required/i.test(message)) return result;
+    } catch (error) {
+      postError = error instanceof Error ? error : new Error(String(error));
+    }
+
+    try {
+      return await this.sendMutationByGet<T>(payload);
+    } catch (getError) {
+      const detail = getError instanceof Error ? getError.message : String(getError);
+      throw new Error(`${actionLabel} failed. ${detail || postError?.message || ''}`.trim());
+    }
   }
 
   private async fetchWithTimeout(url: string, timeoutMs = 12000): Promise<Response> {
@@ -101,8 +130,7 @@ export class SheetService {
     if (!this.webAppUrl) return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     const payload = { action: 'addBook', ...book, book };
     try {
-      let result = await this.sendMutation<AddBookResponse>(payload);
-      if (!result.success && /borrower.*required/i.test(result.message || '')) result = await this.sendMutationByGet<AddBookResponse>(payload);
+      const result = await this.mutateWithFallback<AddBookResponse>(payload, 'Add book');
       if (!result.success && /borrower.*required/i.test(result.message || '')) return { success: false, message: 'The deployed Apps Script is outdated and is treating Add Book as checkout. Redeploy the current Code.gs.' };
       if (result.success) this.readCache.delete('LIBRARY');
       return result;
@@ -110,31 +138,40 @@ export class SheetService {
   }
 
   async updateBookStatus(bookId: string, status: string) {
-    try { return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'updateBookStatus', bookId, status }); }
+    try { return await this.mutateWithFallback<MutationResult>({ action: 'updateBookStatus', bookId, status }, 'Status update'); }
     catch (error) { return { success: false, message: `Failed to update status: ${(error as Error).message}` }; }
   }
 
   async updateBook(bookId: string, book: Book) {
-    try { return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'updateBook', bookId, book }); }
+    try { return await this.mutateWithFallback<MutationResult>({ action: 'updateBook', bookId, book }, 'Edit book'); }
     catch (error) { return { success: false, message: `Failed to edit book: ${(error as Error).message}` }; }
   }
 
   async archiveBook(bookId: string, archived: boolean) {
-    try { return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'archiveBook', bookId, archived }); }
-    catch (error) { return { success: false, message: `Failed to ${archived ? 'archive' : 'restore'} book: ${(error as Error).message}` }; }
+    try {
+      const result = await this.mutateWithFallback<MutationResult>({ action: 'archiveBook', bookId, archived }, archived ? 'Archive book' : 'Restore book');
+      if (result.success) this.readCache.delete('LIBRARY');
+      if (!result.success && /invalid|unknown|unsupported/i.test(result.message || '')) {
+        return { success: false, message: 'Archive is not available in the deployed Apps Script version. Redeploy the current Code.gs as a new Web App version.' };
+      }
+      return result;
+    } catch (error) { return { success: false, message: `Failed to ${archived ? 'archive' : 'restore'} book: ${(error as Error).message}` }; }
   }
 
   async deleteBook(bookId: string) {
     try {
-      const result = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'deleteBook', bookId });
+      const result = await this.mutateWithFallback<MutationResult>({ action: 'deleteBook', bookId }, 'Delete book');
       if (result.success) this.readCache.delete('LIBRARY');
+      if (!result.success && /invalid|unknown|unsupported|choose check out|borrower.*required/i.test(result.message || '')) {
+        return { success: false, message: 'Delete is not available in the deployed Apps Script version. Redeploy the current Code.gs as a new Web App version.' };
+      }
       return result;
     } catch (error) { return { success: false, message: `Failed to delete book: ${(error as Error).message}` }; }
   }
 
   async addBorrower(name: string) {
     try {
-      const result = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'addBorrower', borrowerName: name });
+      const result = await this.mutateWithFallback<MutationResult>({ action: 'addBorrower', borrowerName: name }, 'Add borrower');
       if (result.success) this.readCache.delete('BORROWERS');
       return result;
     } catch (error) { return { success: false, message: `Failed to add borrower: ${(error as Error).message}` }; }
@@ -142,7 +179,7 @@ export class SheetService {
 
   async editBorrower(oldName: string, newName: string) {
     try {
-      const result = await this.sendMutation<{ success: boolean; message?: string }>({ action: 'editBorrower', oldName, newName });
+      const result = await this.mutateWithFallback<MutationResult>({ action: 'editBorrower', oldName, newName }, 'Edit borrower');
       if (result.success) this.readCache.delete('BORROWERS');
       return result;
     } catch (error) { return { success: false, message: `Failed to edit borrower: ${(error as Error).message}` }; }
@@ -150,7 +187,7 @@ export class SheetService {
 
   async scanBook(bookId: string, borrower: string, dueDays: number, operation: 'checkout' | 'return'): Promise<ScanResponse> {
     try {
-      const result = await this.sendMutation<ScanResponse>({ bookId, borrower, dueDays, operation });
+      const result = await this.mutateWithFallback<ScanResponse>({ bookId, borrower, dueDays, operation }, 'Process scan');
       if (result.success) { this.readCache.delete('LIBRARY'); this.readCache.delete('CHECKOUT LOG'); }
       return result;
     } catch (error) { return { success: false, message: `Failed to process scan: ${(error as Error).message}` }; }
