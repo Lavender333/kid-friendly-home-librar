@@ -158,25 +158,50 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
 
       {showCards && (
         <section ref={cardsRef} className="mt-4 space-y-4" aria-label="Library card maker">
-          <p className="text-center text-sm">Print each card, then scan it before checking out books.</p>
+          <div className="rounded-xl bg-white p-4 text-center">
+            <h3 className="text-xl font-bold">My Library Cards</h3>
+            <p className="mt-1 text-sm">Each card includes the member name, member ID, scanning instructions, and a full-size barcode.</p>
+          </div>
           {borrowers.length === 0 ? (
             <p className="rounded-lg bg-white p-4 text-center font-semibold">Add a borrower first, then return here to print a card.</p>
           ) : (
             <div className="printable-library-cards">
-              {borrowers.map(name => (
-                <article key={name} className="printable-library-card rounded-xl bg-white p-5 text-center shadow">
-                  <p className="text-sm font-semibold uppercase tracking-wide">Mariah's Library</p>
-                  <h3 className="my-2 text-2xl font-bold">{name}</h3>
-                  <p className="mb-3">Library Member</p>
-                  <Barcode value={memberCode(name)} className="mx-auto max-w-full" />
-                  <p className="mt-2 font-mono text-sm">{memberCode(name)}</p>
+              {borrowers.map((name, index) => (
+                <article key={name} className={`printable-library-card library-card-theme-${index % 3}`}>
+                  <div className="library-card-decor library-card-decor-one" aria-hidden="true" />
+                  <div className="library-card-decor library-card-decor-two" aria-hidden="true" />
+                  <header className="library-card-header">
+                    <div className="library-card-icon" aria-hidden="true">📚</div>
+                    <div>
+                      <p className="library-card-library-name">Mariah's Library</p>
+                      <p className="library-card-tagline">Read • Imagine • Explore</p>
+                    </div>
+                  </header>
+
+                  <div className="library-card-member-row">
+                    <div>
+                      <p className="library-card-label">Library Member</p>
+                      <h4 className="library-card-member-name">{name}</h4>
+                    </div>
+                    <div className="library-card-badge">BOOK<br />BUDDY</div>
+                  </div>
+
+                  <div className="library-card-barcode-panel">
+                    <Barcode value={memberCode(name)} className="library-card-barcode" height={48} width={1.8} />
+                    <p className="library-card-member-code">Member ID: {memberCode(name)}</p>
+                  </div>
+
+                  <footer className="library-card-footer">
+                    <span>Scan this card before checking out books.</span>
+                    <span className="library-card-stars" aria-hidden="true">★ ★ ★</span>
+                  </footer>
                 </article>
               ))}
             </div>
           )}
           {borrowers.length > 0 && (
             <button type="button" onClick={() => window.print()} className="print-button-only w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">
-              Print Library Cards
+              Print Full Library Cards
             </button>
           )}
         </section>
