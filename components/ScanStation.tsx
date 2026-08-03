@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ScanResponse } from '../types';
-import Barcode from './Barcode';
 
 interface ScanStationProps {
   onScan: (bookId: string, borrower: string, dueDays: number, operation: 'checkout' | 'return') => Promise<ScanResponse>;
@@ -16,9 +15,7 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
   const [operation, setOperation] = useState<'checkout' | 'return'>('checkout');
   const [lastReceipt, setLastReceipt] = useState<ScanResponse | null>(null);
   const [stationMessage, setStationMessage] = useState('Choose a mode, then scan.');
-  const [showCards, setShowCards] = useState(() => window.location.hash.includes('/library-cards'));
   const inputRef = useRef<HTMLInputElement>(null);
-  const cardsRef = useRef<HTMLElement>(null);
 
   const focusScanner = React.useCallback(() => inputRef.current?.focus({ preventScroll: true }), []);
 
@@ -33,18 +30,6 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
     window.addEventListener('focus', refocus);
     return () => window.removeEventListener('focus', refocus);
   }, [focusScanner]);
-
-  useEffect(() => {
-    const openCardsFromRoute = () => {
-      if (window.location.hash.includes('/library-cards')) {
-        setShowCards(true);
-        window.setTimeout(() => cardsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
-      }
-    };
-    openCardsFromRoute();
-    window.addEventListener('hashchange', openCardsFromRoute);
-    return () => window.removeEventListener('hashchange', openCardsFromRoute);
-  }, []);
 
   const switchMode = (next: 'checkout' | 'return') => {
     setOperation(next);
@@ -151,61 +136,6 @@ const ScanStation: React.FC<ScanStationProps> = ({ onScan, borrowers }) => {
           Process Scan
         </button>
       </form>
-
-      <button type="button" onClick={() => setShowCards(value => !value)} className="mt-5 w-full rounded-lg bg-accent-yellow px-4 py-3 font-bold text-text-dark">
-        {showCards ? 'Hide Library Cards' : 'Make & Print Library Cards'}
-      </button>
-
-      {showCards && (
-        <section ref={cardsRef} className="mt-4 space-y-4" aria-label="Library card maker">
-          <div className="rounded-xl bg-white p-4 text-center">
-            <h3 className="text-xl font-bold">My Library Cards</h3>
-            <p className="mt-1 text-sm">Each card includes the member name, member ID, scanning instructions, and a full-size barcode.</p>
-          </div>
-          {borrowers.length === 0 ? (
-            <p className="rounded-lg bg-white p-4 text-center font-semibold">Add a borrower first, then return here to print a card.</p>
-          ) : (
-            <div className="printable-library-cards">
-              {borrowers.map((name, index) => (
-                <article key={name} className={`printable-library-card library-card-theme-${index % 3}`}>
-                  <div className="library-card-decor library-card-decor-one" aria-hidden="true" />
-                  <div className="library-card-decor library-card-decor-two" aria-hidden="true" />
-                  <header className="library-card-header">
-                    <div className="library-card-icon" aria-hidden="true">📚</div>
-                    <div>
-                      <p className="library-card-library-name">Mariah's Library</p>
-                      <p className="library-card-tagline">Read • Imagine • Explore</p>
-                    </div>
-                  </header>
-
-                  <div className="library-card-member-row">
-                    <div>
-                      <p className="library-card-label">Library Member</p>
-                      <h4 className="library-card-member-name">{name}</h4>
-                    </div>
-                    <div className="library-card-badge">BOOK<br />BUDDY</div>
-                  </div>
-
-                  <div className="library-card-barcode-panel">
-                    <Barcode value={memberCode(name)} className="library-card-barcode" height={48} width={1.8} />
-                    <p className="library-card-member-code">Member ID: {memberCode(name)}</p>
-                  </div>
-
-                  <footer className="library-card-footer">
-                    <span>Scan this card before checking out books.</span>
-                    <span className="library-card-stars" aria-hidden="true">★ ★ ★</span>
-                  </footer>
-                </article>
-              ))}
-            </div>
-          )}
-          {borrowers.length > 0 && (
-            <button type="button" onClick={() => window.print()} className="print-button-only w-full rounded-lg bg-text-dark px-4 py-3 font-bold text-white">
-              Print Full Library Cards
-            </button>
-          )}
-        </section>
-      )}
 
       {lastReceipt?.success && (
         <div className="mt-6 rounded-xl border-2 border-primary-green bg-white p-4 text-center">
