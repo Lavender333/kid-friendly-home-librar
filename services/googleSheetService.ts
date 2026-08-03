@@ -136,7 +136,15 @@ export class SheetService {
   async addBook(book: Book): Promise<{ success: boolean; message?: string }> {
     if (!this.webAppUrl) return { success: false, message: 'Google Apps Script Web App URL is not configured.' };
     try {
-      return await this.sendMutation<{ success: boolean; message?: string }>({ action: 'addBook', book });
+      // Support both Apps Script payload formats: older deployments expect the
+      // book fields at the top level, while newer deployments read payload.book.
+      const result = await this.sendMutation<{ success: boolean; message?: string }>({
+        action: 'addBook',
+        ...book,
+        book,
+      });
+      if (result.success) this.readCache.delete('LIBRARY');
+      return result;
     } catch (error) {
       return { success: false, message: `Failed to add book: ${(error as Error).message}` };
     }
