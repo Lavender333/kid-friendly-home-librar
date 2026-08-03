@@ -1,11 +1,10 @@
-
 export interface Book {
   barcode: string;
   bookId: string;
   title: string;
-  author: string; // New
-  publisher: string; // New
-  publicationYear: string; // New
+  author: string;
+  publisher: string;
+  publicationYear: string;
   genre: string;
   status: string;
   borrower: string;
@@ -15,11 +14,15 @@ export interface Book {
 }
 
 export interface LogEntry {
-  timestamp: string;
+  checkoutDate: string;
+  timestamp?: string; // Backward compatibility with older log rows.
   bookId: string;
   title: string;
   borrower: string;
   action: string;
+  dueDate: string;
+  returnDate: string;
+  daysLate: string;
   notes: string;
 }
 
@@ -42,6 +45,13 @@ export interface SheetResponse<T> {
   data?: T[];
 }
 
+export interface AddBookResponse {
+  success: boolean;
+  message?: string;
+  bookId?: string;
+  barcode?: string;
+}
+
 export interface ScanResponse {
   success: boolean;
   message?: string;
@@ -52,4 +62,5 @@ export interface ScanResponse {
   newStatus?: string;
   dueDate?: string;
   timestamp?: string;
+  daysLate?: number;
 }
