@@ -183,7 +183,11 @@ const App: React.FC = () => {
     window.addEventListener('mariahs-library-update', handleUpdate); return () => window.removeEventListener('mariahs-library-update', handleUpdate);
   }, []);
 
-  React.useEffect(() => { if (message.text) { const timer = setTimeout(() => setMessage({ text: '', type: '' }), 5000); return () => clearTimeout(timer); } }, [message]);
+  React.useEffect(() => {
+    if (!message.text) return;
+    const timer = window.setTimeout(() => setMessage({ text: '', type: '' }), message.type === 'success' ? 2000 : 6000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
   const borrowerNames = React.useMemo(() => borrowersList.map(b => b.name), [borrowersList]);
 
   return (
