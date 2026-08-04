@@ -2,6 +2,7 @@ import React from 'react';
 import { Book } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import Barcode from './Barcode';
+import { CRICUT_LABELS_PER_PAGE, downloadCricutLabelPage } from '../services/cricutLabelService';
 
 interface LibraryViewProps {
   books: Book[];
@@ -23,6 +24,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
   const [labelBooks, setLabelBooks] = React.useState<Book[]>([]);
   const [confirmArchiveId, setConfirmArchiveId] = React.useState('');
   const [confirmDeleteId, setConfirmDeleteId] = React.useState('');
+  const [cricutMessage, setCricutMessage] = React.useState('');
   const editRef = React.useRef<HTMLFormElement>(null);
   const labelRef = React.useRef<HTMLElement>(null);
   const archivedCount = books.filter(book => book.status === 'Archived').length;
@@ -55,6 +57,22 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
 
   const openLabels = (selected: Book[]) => setLabelBooks(selected.filter(book => book.bookId && book.status !== 'Archived'));
   const printLabels = () => window.setTimeout(() => window.print(), 100);
+  const cricutPages = React.useMemo(() => {
+    const pages: Book[][] = [];
+    for (let index = 0; index < labelBooks.length; index += CRICUT_LABELS_PER_PAGE) pages.push(labelBooks.slice(index, index + CRICUT_LABELS_PER_PAGE));
+    return pages;
+  }, [labelBooks]);
+
+  const saveCricutPage = async (page: Book[], pageIndex: number) => {
+    setCricutMessage('Creating your Cricut page…');
+    try {
+      await downloadCricutLabelPage(page, pageIndex + 1);
+      setCricutMessage(`Cricut page ${pageIndex + 1} is ready.`);
+    } catch (error) {
+      if ((error as DOMException).name === 'AbortError') setCricutMessage('Cricut save canceled.');
+      else setCricutMessage(`Could not create the Cricut page: ${(error as Error).message}`);
+    }
+  };
 
   if (isLoading && books.length === 0) return <LoadingSpinner />;
 
@@ -90,7 +108,27 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
               </article>
             ))}
           </div>
-          <button type="button" onClick={printLabels} className="print-button-only mt-4 w-full rounded-lg bg-text-dark px-4 py-3 text-lg font-bold text-white">Print / Save Label Sheet</button>
+          <div className="print-button-only mt-4 grid gap-3">
+            <button type="button" onClick={printLabels} className="w-full rounded-lg bg-text-dark px-4 py-3 text-lg font-bold text-white">Print / Save Label Sheet</button>
+            <details className="rounded-xl border-2 border-purple-400 bg-purple-50 p-4">
+              <summary className="cursor-pointer text-lg font-bold text-purple-900">Cricut Print Then Cut</summary>
+              <p className="mt-2 text-sm text-gray-700">Each transparent PNG contains up to 12 separate white rectangles. Cricut can detect each rectangle as a label edge.</p>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                {cricutPages.map((page, pageIndex) => (
+                  <button key={pageIndex} type="button" onClick={() => void saveCricutPage(page, pageIndex)} className="rounded-lg bg-purple-700 px-4 py-3 font-bold text-white">
+                    Save Cricut Page {pageIndex + 1}
+                  </button>
+                ))}
+              </div>
+              {cricutMessage && <p className="mt-3 font-semibold" aria-live="polite">{cricutMessage}</p>}
+              <ol className="mt-3 list-decimal space-y-1 pl-5 text-sm text-gray-700">
+                <li>Upload the PNG to Cricut Design Space as a Flat Graphic.</li>
+                <li>Choose Print Then Cut and set the image width to 6 inches with the size lock on.</li>
+                <li>Do not remove the white label rectangles; they are the cut boundaries.</li>
+                <li>Tap Make It, then print and cut from that same Design Space session.</li>
+              </ol>
+            </details>
+          </div>
         </section>
       )}
 
