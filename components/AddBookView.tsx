@@ -23,11 +23,18 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
   const isbnRef = React.useRef<HTMLInputElement>(null);
   const titleRef = React.useRef<HTMLInputElement>(null);
   const scanTimerRef = React.useRef<number | null>(null);
+  const isSubmittingRef = React.useRef(false);
 
   React.useEffect(() => {
     isbnRef.current?.focus();
     return () => { if (scanTimerRef.current !== null) window.clearTimeout(scanTimerRef.current); };
   }, []);
+
+  React.useEffect(() => {
+    if (!formMessage) return;
+    const timer = window.setTimeout(() => setFormMessage(''), 2200);
+    return () => window.clearTimeout(timer);
+  }, [formMessage]);
 
   const update = (field: keyof Book, value: string) => setBook(current => ({ ...current, [field]: value }));
 
@@ -52,19 +59,34 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
     if (isValidIsbn(normalized)) scanTimerRef.current = window.setTimeout(() => void lookUpIsbn(normalized), 250);
   };
 
+  const clearIsbn = () => {
+    if (scanTimerRef.current !== null) window.clearTimeout(scanTimerRef.current);
+    setIsbn('');
+    setLookupMessage('Ready to scan the ISBN barcode on the back of the book.');
+    setFormMessage('');
+    requestAnimationFrame(() => isbnRef.current?.focus());
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const isbnNote = isbn ? `ISBN: ${isbn}` : '';
-    const bookToSave: Book = { ...book, notes: [book.notes.trim(), isbnNote].filter(Boolean).join('\n') };
-    const result = await onAddBook(bookToSave);
-    setFormMessage(result.message || '');
-    if (result.success) {
-      const canonicalId = result.bookId || result.barcode || book.bookId;
-      const canonicalBarcode = result.barcode || canonicalId;
-      setSavedBook({ ...bookToSave, bookId: canonicalId, barcode: canonicalBarcode });
-      setBook(createEmptyBook()); setIsbn('');
-      setLookupMessage('Ready to scan the next ISBN barcode. A new Library Book ID will be created automatically when saved.');
-      requestAnimationFrame(() => isbnRef.current?.focus());
+    if (isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    try {
+      const noteLines = book.notes.split('\n').map(line => line.trim()).filter(Boolean);
+      if (isbn && !noteLines.some(line => normalizeIsbn(line.replace(/^ISBN:\s*/i, '')) === isbn)) noteLines.push(`ISBN: ${isbn}`);
+      const bookToSave: Book = { ...book, notes: noteLines.join('\n') };
+      const result = await onAddBook(bookToSave);
+      setFormMessage(result.message || '');
+      if (result.success) {
+        const canonicalId = result.bookId || result.barcode || book.bookId;
+        const canonicalBarcode = result.barcode || canonicalId;
+        setSavedBook({ ...bookToSave, bookId: canonicalId, barcode: canonicalBarcode });
+        setBook(createEmptyBook()); setIsbn('');
+        setLookupMessage('Ready to scan the next ISBN barcode. A new Library Book ID will be created automatically when saved.');
+        requestAnimationFrame(() => isbnRef.current?.focus());
+      }
+    } finally {
+      isSubmittingRef.current = false;
     }
   };
 
@@ -84,6 +106,7 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
           <p id="isbn-status" className="mt-2 text-sm font-semibold" aria-live="polite">{isLookingUp ? '📖 ' : ''}{lookupMessage}</p>
           <div className="mt-3 flex flex-wrap justify-center gap-2">
             <button type="button" disabled={isLookingUp || !isValidIsbn(isbn)} onClick={() => void lookUpIsbn()} className="rounded-lg bg-accent-yellow px-4 py-2 font-bold disabled:opacity-50">{isLookingUp ? 'Looking Up…' : 'Look Up ISBN'}</button>
+            <button type="button" disabled={isLookingUp || !isbn} onClick={clearIsbn} className="rounded-lg border-2 border-text-dark bg-white px-4 py-2 font-bold disabled:opacity-50">Clear</button>
             {isValidIsbn(isbn) && (
               <a
                 href={`https://isbnsearch.org/isbn/${encodeURIComponent(isbn)}`}
