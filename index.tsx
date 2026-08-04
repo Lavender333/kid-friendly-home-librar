@@ -5,6 +5,7 @@ import { HashRouter } from 'react-router-dom';
 import { registerSW } from 'virtual:pwa-register';
 import App from './App';
 import './styles.css';
+import './book-labels.css';
 
 const updateServiceWorker = registerSW({
   immediate: true,
