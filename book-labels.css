@@ -1,0 +1,63 @@
+.printable-book-labels {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 10px;
+}
+
+.printable-book-label {
+  box-sizing: border-box;
+  min-height: 120px;
+  overflow: hidden;
+  border: 1.5px dashed #444;
+  border-radius: 8px;
+  padding: 8px;
+  background: #fff;
+  color: #111;
+  text-align: center;
+}
+
+.book-label-library { margin: 0; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .04em; }
+.book-label-title { margin: 2px 0 1px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 800; }
+.book-label-barcode { display: block; max-width: 100%; margin: 1px auto 0; }
+.book-label-id { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; font-weight: 800; }
+
+@media print {
+  .printable-book-labels,
+  .printable-book-labels * {
+    visibility: visible !important;
+  }
+
+  .printable-book-labels {
+    display: grid !important;
+    grid-template-columns: repeat(3, 2.5in) !important;
+    grid-auto-rows: 1.25in !important;
+    gap: .08in !important;
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 7.66in !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+
+  .printable-book-label {
+    box-sizing: border-box !important;
+    width: 2.5in !important;
+    height: 1.25in !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    border: 1px dashed #444 !important;
+    border-radius: 0 !important;
+    padding: .055in .08in !important;
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+  }
+
+  .book-label-library { margin: 0 !important; font-size: 7pt !important; line-height: 1 !important; }
+  .book-label-title { margin: .015in 0 0 !important; font-size: 8pt !important; line-height: 1.05 !important; }
+  .printable-book-label svg { display: block !important; max-width: 2.25in !important; height: .52in !important; margin: .015in auto 0 !important; }
+  .book-label-id { margin: 0 !important; font-size: 6.5pt !important; line-height: 1 !important; }
+}

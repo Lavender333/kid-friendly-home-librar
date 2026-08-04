@@ -1,539 +1,176 @@
+/***** Mariah's Home Library — Apps Script Web App *****/
+const TAB_LIBRARY = 'LIBRARY';
+const TAB_LOG = 'CHECKOUT LOG';
+const TAB_BORROWERS = 'BORROWERS';
+const SPREADSHEET_ID = '1rRO12mPbnNFE12G3c3hL_VlbHsrUSQeO';
+const BACKEND_VERSION = '10';
 
-/***** Home Library Automation (Web App Version) *****
-Tabs:
-- LIBRARY
-- CHECKOUT LOG
-- BORROWERS
+const LIB_HEADERS = ['Barcode','Book ID','Title','Author','Publisher','Publication Year','Genre','Status','Borrower','Checkout Date','Due Date','Notes'];
+const LOG_HEADERS = ['Checkout Date','Book ID','Title','Borrower','Action','Due Date','Return Date','Days Late','Notes'];
+const BORROWER_HEADERS = ['Name'];
+const COL_BARCODE = 0, COL_BOOK_ID = 1, COL_TITLE = 2, COL_AUTHOR = 3, COL_PUBLISHER = 4, COL_YEAR = 5,
+  COL_GENRE = 6, COL_STATUS = 7, COL_BORROWER = 8, COL_CHECKOUT = 9, COL_DUE = 10, COL_NOTES = 11;
 
-LIBRARY columns (0-indexed for script):
-A Barcode (0)
-B Book ID (1)
-C Title (2)
-D Author (3)
-E Publisher (4)
-F Publication Year (5)
-G Genre (6)
-H Status (7)
-I Borrower (8)
-J Checkout Date (9)
-K Due Date (10)
-L Notes (11)
+function json_(value) { return ContentService.createTextOutput(JSON.stringify(value)).setMimeType(ContentService.MimeType.JSON); }
+function getLibrarySpreadsheet() { return SpreadsheetApp.openById(SPREADSHEET_ID); }
 
-CHECKOUT LOG columns (0-indexed for script):
-A Timestamp (0)
-B Book ID (1)
-C Title (2)
-D Borrower (3)
-E Action (4)
-F Notes (5)
-
-BORROWERS columns (0-indexed for script):
-A Name (0)
-************************************/
-
-const TAB_LIBRARY = "LIBRARY";
-const TAB_LOG = "CHECKOUT LOG";
-const TAB_BORROWERS = "BORROWERS"; // New constant for borrowers tab
-const SPREADSHEET_ID = "1rRO12mPbnNFE12G3c3hL_VlbHsrUSQeO";
-const BACKEND_VERSION = "8";
-
-function getLibrarySpreadsheet() {
-  return SpreadsheetApp.openById(SPREADSHEET_ID);
+function ensureSheet_(ss, name, headers) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+  if (sheet.getLastRow() === 0) sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  const width = Math.max(sheet.getLastColumn(), headers.length);
+  const current = sheet.getRange(1, 1, 1, width).getDisplayValues()[0];
+  headers.forEach((header, index) => { if (!String(current[index] || '').trim()) sheet.getRange(1, index + 1).setValue(header); });
+  return sheet;
 }
 
-// LIBRARY column indices (0-indexed for script internal use)
-const COL_BARCODE_IDX = 0; // A
-const COL_BOOK_ID_IDX = 1; // B
-const COL_TITLE_IDX = 2;   // C
-const COL_AUTHOR_IDX = 3; // D (New)
-const COL_PUBLISHER_IDX = 4; // E (New)
-const COL_PUB_YEAR_IDX = 5; // F (New)
-const COL_GENRE_IDX = 6;   // G (was D)
-const COL_STATUS_IDX = 7;  // H (was E)
-const COL_BORROWER_IDX = 8;// I (was F)
-const COL_CHECKOUT_DATE_IDX = 9; // J (was G)
-const COL_DUE_DATE_IDX = 10; // K (was H)
-const COL_NOTES_IDX = 11;   // L (was I)
-
-// CHECKOUT LOG column indices (0-indexed for script internal use)
-const LOG_COL_TIMESTAMP_IDX = 0; // A
-const LOG_COL_BOOK_ID_IDX = 1;   // B
-const LOG_COL_TITLE_IDX = 2;     // C
-const LOG_COL_BORROWER_IDX = 3;  // D
-const LOG_COL_ACTION_IDX = 4;    // E
-const LOG_COL_NOTES_IDX = 5;     // F
-
-// BORROWERS column indices (0-indexed for script internal use)
-const BORROWER_COL_NAME_IDX = 0; // A
-
-/**
- * Ensures proper CORS headers for web app deployment.
- */
-function setCorsHeaders(response) {
-  // TextOutput has no setHeader method. Google supplies response headers for
-  // deployed web apps; the frontend uses CORS-simple requests.
-  return response;
+function ensureSchema_() {
+  const ss = getLibrarySpreadsheet();
+  return {
+    ss,
+    lib: ensureSheet_(ss, TAB_LIBRARY, LIB_HEADERS),
+    log: ensureSheet_(ss, TAB_LOG, LOG_HEADERS),
+    borrowers: ensureSheet_(ss, TAB_BORROWERS, BORROWER_HEADERS)
+  };
 }
 
-/**
- * Handles GET requests from the web app for fetching data from various tabs.
- */
 function doGet(e) {
-  if (e.parameter.health === "1") {
-    return ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      app: "Mariah's Library",
-      version: BACKEND_VERSION
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-  if (e.parameter.request) {
-    try {
-      return handleMutation(JSON.parse(e.parameter.request));
-    } catch (err) {
-      return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Error: ${err.message}` }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-  }
-  const tabName = e.parameter.tab;
   try {
-    const ss = getLibrarySpreadsheet();
-
-    let responseData = { success: false, message: 'Invalid tab specified.' };
-
-    if (tabName === TAB_LIBRARY) {
-      const lib = ss.getSheetByName(TAB_LIBRARY);
-      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
-      const lastRow = lib.getLastRow();
-      let headers = [];
-      let data = [];
-      if (lastRow > 0) { // Fetch headers even if only header row exists
-        headers = lib.getRange(1, 1, 1, lib.getLastColumn()).getValues()[0];
-        if (lastRow > 1) { // Fetch data only if there are rows beyond the header
-          data = lib.getRange(2, 1, lastRow - 1, lib.getLastColumn()).getDisplayValues()
-            .filter(row => String(row[COL_BOOK_ID_IDX]).trim() !== "");
-        }
-      }
-      responseData = { success: true, headers: headers, data: data, message: 'Library data fetched successfully.' };
-
-    } else if (tabName === TAB_LOG) {
-      const log = ss.getSheetByName(TAB_LOG);
-      if (!log) throw new Error(`Tab not found: ${TAB_LOG}`);
-      const lastRow = log.getLastRow();
-      let headers = [];
-      let data = [];
-      if (lastRow > 0) { // Fetch headers even if only header row exists
-        headers = log.getRange(1, 1, 1, log.getLastColumn()).getValues()[0];
-        if (lastRow > 1) { // Fetch data only if there are rows beyond the header
-          data = log.getRange(2, 1, lastRow - 1, log.getLastColumn()).getDisplayValues();
-        }
-      }
-      responseData = { success: true, headers: headers, data: data, message: 'Checkout log fetched successfully.' };
-
-    } else if (tabName === TAB_BORROWERS) { // New logic for borrowers tab
-      const borrowersSheet = ss.getSheetByName(TAB_BORROWERS);
-      if (!borrowersSheet) throw new Error(`Tab not found: ${TAB_BORROWERS}`);
-      const lastRow = borrowersSheet.getLastRow();
-      let names = [];
-      // Assuming "Name" is the only header and it's always in row 1
-      let headers = ["Name"]; 
-      if (lastRow > 1) { // Fetch data only if there are rows beyond the header
-        names = borrowersSheet.getRange(2, 1, lastRow - 1, 1).getValues().map(row => row[0]);
-      }
-      responseData = { success: true, headers: headers, data: names.map(name => [name]), message: 'Borrowers data fetched successfully.' };
-
-    } else {
-      throw new Error("Invalid tab specified.");
-    }
-
-    const output = ContentService.createTextOutput(JSON.stringify(responseData))
-      .setMimeType(ContentService.MimeType.JSON);
-    return setCorsHeaders(output);
-
-  } catch (err) {
-    const errorOutput = ContentService.createTextOutput(JSON.stringify({ success: false, message: `Error: ${err.message}` }))
-      .setMimeType(ContentService.MimeType.JSON);
-    return setCorsHeaders(errorOutput);
-  }
+    if (e.parameter.health === '1') return json_({ success: true, app: "Mariah's Library", version: BACKEND_VERSION });
+    if (e.parameter.request) return handleMutation(JSON.parse(e.parameter.request));
+    const { lib, log, borrowers } = ensureSchema_();
+    const sheet = e.parameter.tab === TAB_LIBRARY ? lib : e.parameter.tab === TAB_LOG ? log : e.parameter.tab === TAB_BORROWERS ? borrowers : null;
+    if (!sheet) return json_({ success: false, message: 'Invalid tab specified.' });
+    const lastRow = sheet.getLastRow(), lastColumn = sheet.getLastColumn();
+    const headers = lastColumn ? sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0] : [];
+    let data = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, lastColumn).getDisplayValues() : [];
+    if (e.parameter.tab === TAB_LIBRARY) data = data.filter(row => String(row[COL_BOOK_ID] || '').trim());
+    return json_({ success: true, headers, data });
+  } catch (error) { return json_({ success: false, message: `Error: ${error.message}` }); }
 }
 
-/**
- * Handles POST requests from the web app for scanning/checking out/returning books or adding/editing borrowers.
- * Expected JSON payload:
- * - For scan: { bookId: string, borrower: string, dueDays: number }
- * - For add borrower: { action: 'addBorrower', borrowerName: string }
- * - For edit borrower: { action: 'editBorrower', oldName: string, newName: string }
- */
 function doPost(e) {
-  return handleMutation(JSON.parse(e.postData.contents));
+  try { return handleMutation(JSON.parse(e.postData.contents)); }
+  catch (error) { return json_({ success: false, message: `Error: ${error.message}` }); }
+}
+
+function findBookRow_(lib, identifier) {
+  const lastRow = lib.getLastRow();
+  if (lastRow < 2) return -1;
+  const target = String(identifier || '').trim();
+  const ids = lib.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
+  const index = ids.findIndex(row => String(row[0]).trim() === target || String(row[1]).trim() === target);
+  return index === -1 ? -1 : index + 2;
+}
+
+function uniqueBookId_(lib) {
+  const existing = new Set();
+  if (lib.getLastRow() > 1) lib.getRange(2, COL_BOOK_ID + 1, lib.getLastRow() - 1, 1).getDisplayValues().forEach(row => existing.add(String(row[0]).trim()));
+  let id;
+  do { id = `ML-${Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase()}`; } while (existing.has(id));
+  return id;
+}
+
+function appendLog_(log, checkoutDate, bookId, title, borrower, action, dueDate, returnDate, daysLate, notes) {
+  log.appendRow([checkoutDate || '', bookId, title, borrower || '', action, dueDate || '', returnDate || '', daysLate === '' ? '' : daysLate, notes || '']);
 }
 
 function handleMutation(request) {
   try {
-    const ss = getLibrarySpreadsheet();
+    const { lib, log, borrowers } = ensureSchema_();
+    const action = String(request.action || '').trim();
 
-    if (request.action === 'updateBookStatus') {
-      const bookId = String(request.bookId || '').trim();
-      const newStatus = String(request.status || '').trim();
-      const allowedStatuses = ['On Shelf', 'Checked Out', 'Missing', 'Repair'];
-      if (!bookId || !allowedStatuses.includes(newStatus)) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'A valid Book ID and status are required.' }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const lib = ss.getSheetByName(TAB_LIBRARY);
-      const log = ss.getSheetByName(TAB_LOG);
-      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
-      if (!log) throw new Error(`Tab not found: ${TAB_LOG}`);
-      const lastRow = lib.getLastRow();
-      const ids = lastRow > 1 ? lib.getRange(2, COL_BOOK_ID_IDX + 1, lastRow - 1, 1).getDisplayValues() : [];
-      const matchIndex = ids.findIndex(row => String(row[0]).trim() === bookId);
-      if (matchIndex === -1) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Book ID not found: ${bookId}` }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const row = matchIndex + 2;
-      const title = String(lib.getRange(row, COL_TITLE_IDX + 1).getDisplayValue()).trim();
-      const borrowerCell = lib.getRange(row, COL_BORROWER_IDX + 1);
-      const existingBorrower = String(borrowerCell.getDisplayValue()).trim();
-      if (newStatus === 'Checked Out' && !existingBorrower) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Use Scan Station to check out a book so a borrower and due date are recorded.' }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      lib.getRange(row, COL_STATUS_IDX + 1).setValue(newStatus);
-      if (newStatus !== 'Checked Out') {
-        borrowerCell.clearContent();
-        lib.getRange(row, COL_CHECKOUT_DATE_IDX + 1).clearContent();
-        lib.getRange(row, COL_DUE_DATE_IDX + 1).clearContent();
-      }
-      log.appendRow([new Date(), bookId, title, existingBorrower, `Status → ${newStatus}`, 'Manual status update']);
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Updated '${title}' to ${newStatus}.` }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    if (request.action === 'updateBook') {
-      const bookId = String(request.bookId || '').trim();
-      const book = request.book || {};
+    if (action === 'addBook') {
+      const book = request.book || request || {};
       const title = String(book.title || '').trim();
-      const barcode = String(book.barcode || bookId).trim();
-      if (!bookId || !title) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Book ID and title are required.' }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const lib = ss.getSheetByName(TAB_LIBRARY);
-      const log = ss.getSheetByName(TAB_LOG);
-      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
-      if (!log) throw new Error(`Tab not found: ${TAB_LOG}`);
-      const lastRow = lib.getLastRow();
-      const ids = lastRow > 1 ? lib.getRange(2, COL_BOOK_ID_IDX + 1, lastRow - 1, 1).getDisplayValues() : [];
-      const matchIndex = ids.findIndex(row => String(row[0]).trim() === bookId);
-      if (matchIndex === -1) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Book ID not found: ${bookId}` }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const sheetRow = matchIndex + 2;
-      if (lastRow > 1) {
-        const barcodes = lib.getRange(2, COL_BARCODE_IDX + 1, lastRow - 1, 1).getDisplayValues();
-        const duplicateBarcode = barcodes.some((row, index) => index !== matchIndex && String(row[0]).trim() === barcode);
-        if (duplicateBarcode) {
-          return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Barcode already belongs to another book: ${barcode}` }))
-            .setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-
-      const rowValues = lib.getRange(sheetRow, 1, 1, 12).getValues()[0];
-      rowValues[COL_BARCODE_IDX] = barcode;
-      rowValues[COL_TITLE_IDX] = title;
-      rowValues[COL_AUTHOR_IDX] = String(book.author || '').trim();
-      rowValues[COL_PUBLISHER_IDX] = String(book.publisher || '').trim();
-      rowValues[COL_PUB_YEAR_IDX] = String(book.publicationYear || '').trim();
-      rowValues[COL_GENRE_IDX] = String(book.genre || '').trim();
-      rowValues[COL_NOTES_IDX] = String(book.notes || '').trim();
-      lib.getRange(sheetRow, 1, 1, 12).setValues([rowValues]);
-      log.appendRow([new Date(), bookId, title, String(rowValues[COL_BORROWER_IDX] || ''), 'Edited', 'Book details updated']);
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Updated '${title}'.` }))
-        .setMimeType(ContentService.MimeType.JSON);
+      if (!title) return json_({ success: false, message: 'Book title is required.' });
+      const bookId = uniqueBookId_(lib), barcode = bookId;
+      lib.appendRow([barcode, bookId, title, String(book.author || '').trim(), String(book.publisher || '').trim(), String(book.publicationYear || '').trim(), String(book.genre || '').trim(), 'On Shelf', '', '', '', String(book.notes || '').trim()]);
+      return json_({ success: true, message: `Saved '${title}' as physical copy ${bookId}.`, bookId, barcode });
     }
 
-    if (request.action === 'archiveBook') {
-      const bookId = String(request.bookId || '').trim();
-      const archive = request.archived !== false;
-      if (!bookId) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Book ID is required.' }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const lib = ss.getSheetByName(TAB_LIBRARY);
-      const log = ss.getSheetByName(TAB_LOG);
-      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
-      if (!log) throw new Error(`Tab not found: ${TAB_LOG}`);
-      const lastRow = lib.getLastRow();
-      const ids = lastRow > 1 ? lib.getRange(2, COL_BOOK_ID_IDX + 1, lastRow - 1, 1).getDisplayValues() : [];
-      const matchIndex = ids.findIndex(row => String(row[0]).trim() === bookId);
-      if (matchIndex === -1) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Book ID not found: ${bookId}` }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const sheetRow = matchIndex + 2;
-      const title = String(lib.getRange(sheetRow, COL_TITLE_IDX + 1).getDisplayValue()).trim();
-      const currentStatus = String(lib.getRange(sheetRow, COL_STATUS_IDX + 1).getDisplayValue()).trim() || 'On Shelf';
-      if (archive && currentStatus === 'Checked Out') {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Check in '${title}' before archiving it.` }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const newStatus = archive ? 'Archived' : 'On Shelf';
-      lib.getRange(sheetRow, COL_STATUS_IDX + 1).setValue(newStatus);
-      lib.getRange(sheetRow, COL_BORROWER_IDX + 1, 1, 3).clearContent();
-      log.appendRow([new Date(), bookId, title, '', archive ? 'Archived' : 'Restored', 'Book record retained']);
-      return ContentService.createTextOutput(JSON.stringify({
-        success: true,
-        message: archive ? `Archived '${title}'.` : `Restored '${title}' to the shelf.`
-      })).setMimeType(ContentService.MimeType.JSON);
+    if (action === 'addBorrower') {
+      const name = String(request.borrowerName || '').trim();
+      if (!name) return json_({ success: false, message: 'Borrower name is required.' });
+      const existing = borrowers.getLastRow() > 1 ? borrowers.getRange(2, 1, borrowers.getLastRow() - 1, 1).getDisplayValues().map(row => String(row[0]).trim().toLowerCase()) : [];
+      if (existing.includes(name.toLowerCase())) return json_({ success: false, message: `Borrower '${name}' already exists.` });
+      borrowers.appendRow([name]);
+      return json_({ success: true, message: `Borrower '${name}' added.` });
     }
 
-    if (request.action === 'addBook') {
-      const book = request.book || {};
-      const generatedId = `ML-${Utilities.getUuid().replace(/-/g, '').slice(0, 10).toUpperCase()}`;
-      const bookId = String(book.bookId || book.barcode || generatedId).trim();
-      const barcode = String(book.barcode || bookId).trim();
+    if (action === 'editBorrower') {
+      const oldName = String(request.oldName || '').trim(), newName = String(request.newName || '').trim();
+      if (!oldName || !newName) return json_({ success: false, message: 'Original and new borrower names are required.' });
+      if (borrowers.getLastRow() < 2) return json_({ success: false, message: `Borrower '${oldName}' not found.` });
+      const names = borrowers.getRange(2, 1, borrowers.getLastRow() - 1, 1).getDisplayValues();
+      const index = names.findIndex(row => String(row[0]).trim().toLowerCase() === oldName.toLowerCase());
+      if (index === -1) return json_({ success: false, message: `Borrower '${oldName}' not found.` });
+      if (names.some((row, i) => i !== index && String(row[0]).trim().toLowerCase() === newName.toLowerCase())) return json_({ success: false, message: `Borrower '${newName}' already exists.` });
+      borrowers.getRange(index + 2, 1).setValue(newName);
+      if (lib.getLastRow() > 1) lib.getRange(2, COL_BORROWER + 1, lib.getLastRow() - 1, 1).getDisplayValues().forEach((row, i) => { if (String(row[0]).trim().toLowerCase() === oldName.toLowerCase()) lib.getRange(i + 2, COL_BORROWER + 1).setValue(newName); });
+      return json_({ success: true, message: `Borrower '${oldName}' updated to '${newName}'.` });
+    }
+
+    if (action === 'updateBook') {
+      const bookId = String(request.bookId || '').trim(), book = request.book || {}, row = findBookRow_(lib, bookId);
+      if (row === -1) return json_({ success: false, message: `Book ID not found: ${bookId}` });
       const title = String(book.title || '').trim();
-      if (!title) {
-        return ContentService.createTextOutput(JSON.stringify({ success: false, message: 'Book title is required.' }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const lib = ss.getSheetByName(TAB_LIBRARY);
-      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
-      const lastRow = lib.getLastRow();
-      if (lastRow > 1) {
-        const existing = lib.getRange(2, 1, lastRow - 1, 2).getDisplayValues();
-        const duplicate = existing.some(row =>
-          String(row[0]).trim() === barcode || String(row[1]).trim() === bookId
-        );
-        if (duplicate) {
-          return ContentService.createTextOutput(JSON.stringify({ success: false, message: `Book ID or barcode already exists: ${bookId}` }))
-            .setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-
-      lib.appendRow([
-        barcode, bookId, title, String(book.author || '').trim(),
-        String(book.publisher || '').trim(), String(book.publicationYear || '').trim(),
-        String(book.genre || '').trim(), 'On Shelf', '', '', '', String(book.notes || '').trim()
-      ]);
-      return ContentService.createTextOutput(JSON.stringify({ success: true, message: `Saved '${title}' with barcode ${barcode}.`, bookId: bookId, barcode: barcode }))
-        .setMimeType(ContentService.MimeType.JSON);
+      if (!title) return json_({ success: false, message: 'Book title is required.' });
+      const values = lib.getRange(row, 1, 1, LIB_HEADERS.length).getValues()[0];
+      values[COL_TITLE] = title; values[COL_AUTHOR] = String(book.author || '').trim(); values[COL_PUBLISHER] = String(book.publisher || '').trim(); values[COL_YEAR] = String(book.publicationYear || '').trim(); values[COL_GENRE] = String(book.genre || '').trim(); values[COL_NOTES] = String(book.notes || '').trim();
+      lib.getRange(row, 1, 1, LIB_HEADERS.length).setValues([values]);
+      appendLog_(log, new Date(), bookId, title, String(values[COL_BORROWER] || ''), 'Edited', '', '', '', 'Book details updated');
+      return json_({ success: true, message: `Updated '${title}'.` });
     }
 
-    // Handle adding a new borrower
-    if (request.action === 'addBorrower') {
-      const borrowerName = String(request.borrowerName || '').trim();
-      if (!borrowerName) {
-        return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: false, message: "Borrower name is required." })))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const borrowersSheet = ss.getSheetByName(TAB_BORROWERS);
-      if (!borrowersSheet) throw new Error(`Tab not found: ${TAB_BORROWERS}`);
-
-      // Check for duplicate borrower name (case-insensitive)
-      const lastRow = borrowersSheet.getLastRow();
-      if (lastRow > 1) {
-        const existingNames = borrowersSheet.getRange(2, BORROWER_COL_NAME_IDX + 1, lastRow - 1, 1).getValues()
-                   .map(row => String(row[0]).trim().toLowerCase());
-        if (existingNames.includes(borrowerName.toLowerCase())) {
-          return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: false, message: `Borrower '${borrowerName}' already exists.` })))
-            .setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-      
-      borrowersSheet.appendRow([borrowerName]);
-      return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: true, message: `Borrower '${borrowerName}' added successfully.` })))
-        .setMimeType(ContentService.MimeType.JSON);
+    if (action === 'deleteBook') {
+      const bookId = String(request.bookId || '').trim(), row = findBookRow_(lib, bookId);
+      if (row === -1) return json_({ success: false, message: `Book ID not found: ${bookId}` });
+      const title = String(lib.getRange(row, COL_TITLE + 1).getDisplayValue()).trim();
+      const status = String(lib.getRange(row, COL_STATUS + 1).getDisplayValue()).trim() || 'On Shelf';
+      if (status === 'Checked Out') return json_({ success: false, message: `Check in '${title}' before deleting it.` });
+      appendLog_(log, new Date(), bookId, title, '', 'Deleted', '', '', '', 'Library record deleted; prior checkout history retained');
+      lib.deleteRow(row);
+      return json_({ success: true, message: `Deleted '${title}'. Checkout history was kept.` });
     }
 
-    // Handle editing an existing borrower
-    if (request.action === 'editBorrower') {
-      const oldName = String(request.oldName || '').trim();
-      const newName = String(request.newName || '').trim();
-
-      if (!oldName) {
-        return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: false, message: "Original borrower name is required for editing." })))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-      if (!newName) {
-        return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: false, message: "New borrower name cannot be empty." })))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-      if (oldName.toLowerCase() === newName.toLowerCase()) {
-        return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: true, message: "No change detected." })))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      const borrowersSheet = ss.getSheetByName(TAB_BORROWERS);
-      if (!borrowersSheet) throw new Error(`Tab not found: ${TAB_BORROWERS}`);
-      const lib = ss.getSheetByName(TAB_LIBRARY);
-      if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
-
-      const lastBorrowerRow = borrowersSheet.getLastRow();
-      let foundBorrowerRow = -1; // 1-indexed sheet row for the borrower
-      const borrowerNames = borrowersSheet.getRange(2, BORROWER_COL_NAME_IDX + 1, lastBorrowerRow - 1, 1).getValues();
-
-      for (let i = 0; i < borrowerNames.length; i++) {
-        if (String(borrowerNames[i][0]).trim().toLowerCase() === oldName.toLowerCase()) {
-          foundBorrowerRow = i + 2; // +2 because range starts at row 2
-          break;
-        }
-      }
-
-      if (foundBorrowerRow === -1) {
-        return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: false, message: `Borrower '${oldName}' not found.` })))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-
-      // Check for duplicate new name, excluding the old name's position
-      for (let i = 0; i < borrowerNames.length; i++) {
-        if (i + 2 !== foundBorrowerRow && String(borrowerNames[i][0]).trim().toLowerCase() === newName.toLowerCase()) {
-          return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: false, message: `Borrower '${newName}' already exists.` })))
-            .setMimeType(ContentService.MimeType.JSON);
-        }
-      }
-      
-      // Update borrower name in BORROWERS tab
-      borrowersSheet.getRange(foundBorrowerRow, BORROWER_COL_NAME_IDX + 1).setValue(newName);
-
-      // Update borrower name in LIBRARY tab for checked out books
-      const lastLibraryRow = lib.getLastRow();
-      if (lastLibraryRow > 1) {
-        const libraryData = lib.getRange(2, COL_BORROWER_IDX + 1, lastLibraryRow - 1, 1).getValues();
-        for (let i = 0; i < libraryData.length; i++) {
-          if (String(libraryData[i][0]).trim().toLowerCase() === oldName.toLowerCase()) {
-            lib.getRange(i + 2, COL_BORROWER_IDX + 1).setValue(newName);
-          }
-        }
-      }
-
-      return setCorsHeaders(ContentService.createTextOutput(JSON.stringify({ success: true, message: `Borrower '${oldName}' successfully updated to '${newName}'.` })))
-        .setMimeType(ContentService.MimeType.JSON);
+    if (action === 'updateBookStatus' || action === 'archiveBook') {
+      const bookId = String(request.bookId || '').trim(), row = findBookRow_(lib, bookId);
+      if (row === -1) return json_({ success: false, message: `Book ID not found: ${bookId}` });
+      const title = String(lib.getRange(row, COL_TITLE + 1).getDisplayValue()).trim();
+      const currentStatus = String(lib.getRange(row, COL_STATUS + 1).getDisplayValue()).trim() || 'On Shelf';
+      const newStatus = action === 'archiveBook' ? (request.archived === false ? 'On Shelf' : 'Archived') : String(request.status || '').trim();
+      if (!['On Shelf','Missing','Repair','Archived'].includes(newStatus)) return json_({ success: false, message: 'Use Scan Station to check out a book.' });
+      if (newStatus === 'Archived' && currentStatus === 'Checked Out') return json_({ success: false, message: `Check in '${title}' before archiving it.` });
+      lib.getRange(row, COL_STATUS + 1).setValue(newStatus); lib.getRange(row, COL_BORROWER + 1, 1, 3).clearContent();
+      appendLog_(log, new Date(), bookId, title, '', newStatus === 'Archived' ? 'Archived' : `Status → ${newStatus}`, '', '', '', 'Manual status update');
+      return json_({ success: true, message: `Updated '${title}' to ${newStatus}.` });
     }
 
-    // Existing logic for scanning books
-    const scannedId = String(request.bookId || '').trim();
-    const borrower = String(request.borrower || '').trim();
-    const requestedOperation = String(request.operation || '').trim().toLowerCase();
-    const dueDays = (request.dueDays && Number(request.dueDays) > 0) ? Number(request.dueDays) : 14;
+    const scannedId = String(request.bookId || '').trim(), operation = String(request.operation || '').trim().toLowerCase(), borrower = String(request.borrower || '').trim();
+    const dueDays = Number(request.dueDays) > 0 ? Number(request.dueDays) : 14;
+    if (!scannedId) return json_({ success: false, message: 'Book ID is required.' });
+    if (!['checkout','return'].includes(operation)) return json_({ success: false, message: 'Choose Check Out or Check In.' });
+    const row = findBookRow_(lib, scannedId);
+    if (row === -1) return json_({ success: false, message: `Book ID not found: ${scannedId}` });
+    const bookId = String(lib.getRange(row, COL_BOOK_ID + 1).getDisplayValue()).trim(), title = String(lib.getRange(row, COL_TITLE + 1).getDisplayValue()).trim();
+    const statusCell = lib.getRange(row, COL_STATUS + 1), borrowerCell = lib.getRange(row, COL_BORROWER + 1), checkoutCell = lib.getRange(row, COL_CHECKOUT + 1), dueCell = lib.getRange(row, COL_DUE + 1);
+    const status = String(statusCell.getDisplayValue()).trim() || 'On Shelf', now = new Date();
 
-    if (!scannedId) {
-      const output = ContentService.createTextOutput(JSON.stringify({ success: false, message: "Book ID is required." }))
-        .setMimeType(ContentService.MimeType.JSON);
-      return setCorsHeaders(output);
-    }
-    const lib = ss.getSheetByName(TAB_LIBRARY);
-    const log = ss.getSheetByName(TAB_LOG);
-
-    if (!lib) throw new Error(`Tab not found: ${TAB_LIBRARY}`);
-    if (!log) throw new Error(`Tab not found: ${TAB_LOG}`);
-
-    const lastRow = lib.getLastRow();
-    if (lastRow < 2) {
-      const output = ContentService.createTextOutput(JSON.stringify({ success: false, message: "LIBRARY tab has no data." }))
-        .setMimeType(ContentService.MimeType.JSON);
-      return setCorsHeaders(output);
+    if (operation === 'checkout') {
+      if (status !== 'On Shelf') return json_({ success: false, message: `'${title}' is unavailable (${status}).` });
+      if (!borrower) return json_({ success: false, message: 'Borrower is required for checkout.' });
+      const dueDate = new Date(now.getTime()); dueDate.setDate(dueDate.getDate() + dueDays);
+      statusCell.setValue('Checked Out'); borrowerCell.setValue(borrower); checkoutCell.setValue(now); dueCell.setValue(dueDate);
+      appendLog_(log, now, bookId, title, borrower, 'Checkout', dueDate, '', '', '');
+      return json_({ success: true, action: 'Checkout', bookId, title, borrower, newStatus: 'Checked Out', dueDate: Utilities.formatDate(dueDate, Session.getScriptTimeZone(), 'MMM d, yyyy'), timestamp: Utilities.formatDate(now, Session.getScriptTimeZone(), 'MMM d, yyyy h:mm a'), message: `Checkout: ${bookId} (${title}) by ${borrower}` });
     }
 
-    // Match either the publisher barcode in column A or the internal Book ID in
-    // column B. This lets the NADAMOO scan the barcode already on the book.
-    const identifiers = lib.getRange(2, COL_BARCODE_IDX + 1, lastRow - 1, 2).getDisplayValues();
-    let foundRow = -1; // 1-indexed sheet row where the book is found
-    for (let i = 0; i < identifiers.length; i++) {
-      const barcode = String(identifiers[i][0]).trim();
-      const bookId = String(identifiers[i][1]).trim();
-      if (barcode === scannedId || bookId === scannedId) {
-        foundRow = i + 2; // +2 because range starts at row 2 (header + 1 for 0-indexed array)
-        break;
-      }
-    }
-
-    if (foundRow === -1) {
-      const output = ContentService.createTextOutput(JSON.stringify({ success: false, message: `Book ID not found: ${scannedId}` }))
-        .setMimeType(ContentService.MimeType.JSON);
-      return setCorsHeaders(output);
-    }
-
-    const title = String(lib.getRange(foundRow, COL_TITLE_IDX + 1).getValue()).trim();
-    const statusCell = lib.getRange(foundRow, COL_STATUS_IDX + 1);
-    const currentStatus = String(statusCell.getValue()).trim() || "On Shelf";
-    const isOnShelf = currentStatus.toLowerCase() === "on shelf";
-    const isCheckedOut = currentStatus.toLowerCase() === "checked out";
-
-    if (requestedOperation === "checkout" && !isOnShelf) {
-      return ContentService.createTextOutput(JSON.stringify({ success: false, message: `'${title}' is unavailable (${currentStatus}).` }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    if (requestedOperation === "return" && !isCheckedOut) {
-      return ContentService.createTextOutput(JSON.stringify({ success: false, message: `'${title}' is not checked out (status: ${currentStatus}).` }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-    if (isOnShelf && !borrower) {
-      return ContentService.createTextOutput(JSON.stringify({ success: false, message: "Borrower is required for checkout." }))
-        .setMimeType(ContentService.MimeType.JSON);
-    }
-
-    const borrowerCell = lib.getRange(foundRow, COL_BORROWER_IDX + 1);
-    const checkoutDateCell = lib.getRange(foundRow, COL_CHECKOUT_DATE_IDX + 1);
-    const dueDateCell = lib.getRange(foundRow, COL_DUE_DATE_IDX + 1);
-
-    const now = new Date();
-    let action = "";
-    let newStatus = "";
-    let transactionBorrower = borrower;
-
-    if (isOnShelf) {
-      action = "Checkout";
-      newStatus = "Checked Out";
-      statusCell.setValue(newStatus);
-      borrowerCell.setValue(borrower);
-      checkoutDateCell.setValue(now);
-
-      const due = new Date(now.getTime());
-      due.setDate(due.getDate() + dueDays);
-      dueDateCell.setValue(due);
-    } else {
-      action = "Return";
-      newStatus = "On Shelf";
-      transactionBorrower = String(borrowerCell.getValue()).trim() || borrower;
-      statusCell.setValue(newStatus);
-      borrowerCell.clearContent();
-      checkoutDateCell.clearContent();
-      dueDateCell.clearContent();
-    }
-
-    // Write to CHECKOUT LOG
-    // A Timestamp | B Book ID | C Title | D Borrower | E Action | F Notes
-    const canonicalBookId = String(lib.getRange(foundRow, COL_BOOK_ID_IDX + 1).getDisplayValue()).trim();
-    log.appendRow([now, canonicalBookId, title, transactionBorrower, action, ""]);
-
-    const output = ContentService.createTextOutput(JSON.stringify({
-      success: true,
-      action: action,
-      bookId: canonicalBookId,
-      title: title,
-      borrower: transactionBorrower,
-      newStatus: newStatus,
-      dueDate: action === "Checkout" ? Utilities.formatDate(dueDateCell.getValue(), Session.getScriptTimeZone(), "MMM d, yyyy") : "",
-      timestamp: Utilities.formatDate(now, Session.getScriptTimeZone(), "MMM d, yyyy h:mm a"),
-      message: `${action}: ${canonicalBookId} (${title}) by ${transactionBorrower}`
-    })).setMimeType(ContentService.MimeType.JSON);
-    return setCorsHeaders(output);
-
-  } catch (err) {
-    const errorOutput = ContentService.createTextOutput(JSON.stringify({ success: false, message: `Error: ${err.message}` }))
-      .setMimeType(ContentService.MimeType.JSON);
-    return setCorsHeaders(errorOutput);
-  }
+    if (status !== 'Checked Out') return json_({ success: false, message: `'${title}' is not checked out (status: ${status}).` });
+    const transactionBorrower = String(borrowerCell.getDisplayValue()).trim() || borrower, checkoutDate = checkoutCell.getValue(), dueDate = dueCell.getValue();
+    const daysLate = dueDate instanceof Date && !isNaN(dueDate) ? Math.max(0, Math.ceil((now.getTime() - dueDate.getTime()) / 86400000)) : 0;
+    statusCell.setValue('On Shelf'); borrowerCell.clearContent(); checkoutCell.clearContent(); dueCell.clearContent();
+    appendLog_(log, checkoutDate, bookId, title, transactionBorrower, 'Return', dueDate, now, daysLate, daysLate > 0 ? `${daysLate} day${daysLate === 1 ? '' : 's'} late` : 'On time');
+    return json_({ success: true, action: 'Return', bookId, title, borrower: transactionBorrower, newStatus: 'On Shelf', dueDate: dueDate instanceof Date ? Utilities.formatDate(dueDate, Session.getScriptTimeZone(), 'MMM d, yyyy') : '', timestamp: Utilities.formatDate(now, Session.getScriptTimeZone(), 'MMM d, yyyy h:mm a'), daysLate, message: daysLate > 0 ? `Return: ${title} was ${daysLate} day${daysLate === 1 ? '' : 's'} late.` : `Return: ${title} was on time.` });
+  } catch (error) { return json_({ success: false, message: `Error: ${error.message}` }); }
 }
