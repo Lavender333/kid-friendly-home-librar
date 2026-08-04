@@ -43,6 +43,54 @@ const fetchJson = async <T>(url: string): Promise<T> => {
   return response.json() as Promise<T>;
 };
 
+const lookupWithEditionApi = async (isbn: string): Promise<Partial<IsbnBookDetails> | null> => {
+  type EditionSubject = string | { name?: string };
+  type Edition = {
+    title?: string;
+    by_statement?: string;
+    publish_date?: string;
+    publishers?: string[];
+    subjects?: EditionSubject[];
+    authors?: Array<{ key?: string }>;
+    works?: Array<{ key?: string }>;
+    isbn_10?: string[];
+    isbn_13?: string[];
+  };
+  type Author = { name?: string; personal_name?: string };
+  type Work = { subjects?: string[] };
+
+  // This endpoint resolves one specific edition, unlike broad catalog searches
+  // that can return another edition or an unrelated digitized record.
+  const edition = await fetchJson<Edition>(`https://openlibrary.org/isbn/${encodeURIComponent(isbn)}.json`);
+  if (!edition.title) return null;
+
+  const returnedIsbns = [...(edition.isbn_10 || []), ...(edition.isbn_13 || [])].map(normalizeIsbn);
+  if (returnedIsbns.length > 0 && !returnedIsbns.includes(isbn)) return null;
+
+  const authorKeys = (edition.authors || []).map(author => author.key).filter((key): key is string => Boolean(key)).slice(0, 4);
+  const workKey = edition.works?.[0]?.key;
+  const [authorResults, workResult] = await Promise.all([
+    Promise.allSettled(authorKeys.map(key => fetchJson<Author>(`https://openlibrary.org${key}.json`))),
+    workKey ? fetchJson<Work>(`https://openlibrary.org${workKey}.json`).catch(() => null) : Promise.resolve(null),
+  ]);
+  const authors = authorResults
+    .filter((result): result is PromiseFulfilledResult<Author> => result.status === 'fulfilled')
+    .map(result => result.value.name || result.value.personal_name)
+    .filter((name): name is string => Boolean(name));
+  const editionSubjects = (edition.subjects || [])
+    .map(subject => typeof subject === 'string' ? subject : subject.name)
+    .filter((subject): subject is string => Boolean(subject));
+  const subjects = editionSubjects.length > 0 ? editionSubjects : workResult?.subjects || [];
+
+  return {
+    title: edition.title,
+    author: authors.join(', ') || edition.by_statement || '',
+    publisher: edition.publishers?.[0] || '',
+    publicationYear: yearFrom(edition.publish_date),
+    genre: subjects.slice(0, 3).join(', '),
+  };
+};
+
 const lookupWithBooksApi = async (isbn: string): Promise<Partial<IsbnBookDetails> | null> => {
   type DataBook = {
     title?: string;
@@ -136,15 +184,19 @@ export const lookupIsbn = async (rawIsbn: string): Promise<IsbnBookDetails> => {
 
   let match: Partial<IsbnBookDetails>;
   try {
-    // Use the first catalog that finds the ISBN so a slow provider never holds up
-    // a result from one of the other independent catalogs.
-    match = await Promise.any([
-      requireMatch(lookupWithInternetArchive(isbn)),
-      requireMatch(lookupWithBooksApi(isbn)),
-      requireMatch(lookupWithSearchApi(isbn)),
-    ]);
+    // Prefer the ISBN edition record for accuracy. The broader catalogs are only
+    // fallbacks for older books that do not yet have an edition record.
+    match = await requireMatch(lookupWithEditionApi(isbn));
   } catch {
-    throw new Error('No book was found for that ISBN, or the catalogs are unavailable. Check the number or enter the details manually.');
+    try {
+      match = await Promise.any([
+        requireMatch(lookupWithInternetArchive(isbn)),
+        requireMatch(lookupWithBooksApi(isbn)),
+        requireMatch(lookupWithSearchApi(isbn)),
+      ]);
+    } catch {
+      throw new Error('No book was found for that ISBN, or the catalogs are unavailable. Check the number or enter the details manually.');
+    }
   }
 
   return {
