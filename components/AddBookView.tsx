@@ -82,7 +82,19 @@ const AddBookView: React.FC<AddBookViewProps> = ({ onAddBook, isLoading }) => {
           <span className="mb-1 block text-lg font-bold">1. Scan ISBN</span>
           <input ref={isbnRef} value={isbn} onChange={e => handleIsbnChange(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); if (scanTimerRef.current !== null) window.clearTimeout(scanTimerRef.current); void lookUpIsbn(e.currentTarget.value); } }} inputMode="numeric" autoComplete="off" className="w-full rounded-lg border p-4 text-lg" placeholder="Scan or type the book's ISBN" aria-describedby="isbn-status" />
           <p id="isbn-status" className="mt-2 text-sm font-semibold" aria-live="polite">{isLookingUp ? '📖 ' : ''}{lookupMessage}</p>
-          <button type="button" disabled={isLookingUp || !isValidIsbn(isbn)} onClick={() => void lookUpIsbn()} className="mt-3 rounded-lg bg-accent-yellow px-4 py-2 font-bold disabled:opacity-50">{isLookingUp ? 'Looking Up…' : 'Look Up ISBN'}</button>
+          <div className="mt-3 flex flex-wrap justify-center gap-2">
+            <button type="button" disabled={isLookingUp || !isValidIsbn(isbn)} onClick={() => void lookUpIsbn()} className="rounded-lg bg-accent-yellow px-4 py-2 font-bold disabled:opacity-50">{isLookingUp ? 'Looking Up…' : 'Look Up ISBN'}</button>
+            {isValidIsbn(isbn) && (
+              <a
+                href={`https://isbnsearch.org/isbn/${encodeURIComponent(isbn)}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg bg-secondary-blue px-4 py-2 font-bold underline"
+              >
+                Search ISBNsearch.org
+              </a>
+            )}
+          </div>
         </label>
         <label className="block"><span className="mb-1 block font-semibold">2. Book Title *</span><input ref={titleRef} value={book.title} onChange={e => update('title', e.target.value)} required autoComplete="off" className="w-full rounded-lg border p-4 text-lg" placeholder="Filled automatically or enter manually" /></label>
         <label className="block"><span className="mb-1 block font-semibold">Author <span className="font-normal">(optional)</span></span><input value={book.author} onChange={e => update('author', e.target.value)} autoComplete="off" className="w-full rounded-lg border p-3" placeholder="Filled automatically when available" /></label>
