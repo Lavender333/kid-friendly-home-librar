@@ -22,6 +22,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
   const [showArchived, setShowArchived] = React.useState(false);
   const [editingBook, setEditingBook] = React.useState<Book | null>(null);
   const [labelBooks, setLabelBooks] = React.useState<Book[]>([]);
+  const [selectedBookIds, setSelectedBookIds] = React.useState<string[]>([]);
   const [confirmArchiveId, setConfirmArchiveId] = React.useState('');
   const [confirmDeleteId, setConfirmDeleteId] = React.useState('');
   const [cricutMessage, setCricutMessage] = React.useState('');
@@ -30,6 +31,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
   const archivedCount = books.filter(book => book.status === 'Archived').length;
   const activeBooks = books.filter(book => book.status !== 'Archived');
   const visibleBooks = showArchived ? books : activeBooks;
+  const selectedBooks = activeBooks.filter(book => selectedBookIds.includes(book.bookId));
 
   React.useEffect(() => { if (editingBook) window.setTimeout(() => editRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }, [editingBook]);
   React.useEffect(() => { if (labelBooks.length) window.setTimeout(() => labelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }, [labelBooks]);
@@ -43,7 +45,10 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
 
   const archive = async (book: Book) => {
     const response = await onArchiveBook(book.bookId, true);
-    if (response.success) setConfirmArchiveId('');
+    if (response.success) {
+      setConfirmArchiveId('');
+      setSelectedBookIds(current => current.filter(bookId => bookId !== book.bookId));
+    }
   };
 
   const deleteBook = async (book: Book) => {
@@ -51,11 +56,13 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
     if (response.success) {
       setConfirmDeleteId('');
       setLabelBooks(current => current.filter(item => item.bookId !== book.bookId));
+      setSelectedBookIds(current => current.filter(bookId => bookId !== book.bookId));
       if (editingBook?.bookId === book.bookId) setEditingBook(null);
     }
   };
 
   const openLabels = (selected: Book[]) => setLabelBooks(selected.filter(book => book.bookId && book.status !== 'Archived'));
+  const toggleSelectedBook = (bookId: string) => setSelectedBookIds(current => current.includes(bookId) ? current.filter(id => id !== bookId) : [...current, bookId]);
   const printLabels = () => window.setTimeout(() => window.print(), 100);
   const cricutPages = React.useMemo(() => {
     const pages: Book[][] = [];
@@ -84,6 +91,8 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
           <p className="mt-1 text-sm text-gray-600">Print one compact label or export all active book labels on one or more sheets.</p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={() => openLabels(selectedBooks)} disabled={selectedBooks.length === 0} className="min-h-11 rounded-lg bg-primary-green px-4 font-bold text-white disabled:opacity-40">Print Selected Labels ({selectedBooks.length})</button>
+          {selectedBooks.length > 0 && <button type="button" onClick={() => setSelectedBookIds([])} className="min-h-11 rounded-lg bg-gray-200 px-4 font-semibold text-text-dark">Clear Selection</button>}
           <button type="button" onClick={() => openLabels(activeBooks)} disabled={activeBooks.length === 0} className="min-h-11 rounded-lg bg-accent-yellow px-4 font-bold text-text-dark disabled:opacity-40">Export / Print All Labels</button>
           <button type="button" onClick={() => setShowArchived(current => !current)} className="min-h-11 rounded-lg bg-gray-200 px-4 font-semibold text-text-dark">{showArchived ? 'Hide Archived' : `Show Archived (${archivedCount})`}</button>
         </div>
@@ -158,11 +167,14 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
 
       {visibleBooks.length === 0 ? <p className="text-center text-gray-500">{showArchived ? 'No books have been archived.' : 'No active books yet. Use Add Book to get started.'}</p> : (
         <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-primary-green text-white"><tr>{['Book ID','Barcode','Title','Author','Status','Borrower','Due Date','Actions'].map(header => <th key={header} className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider md:text-sm">{header}</th>)}</tr></thead>
+          <thead className="bg-primary-green text-white"><tr>{['Select','Book ID','Barcode','Title','Author','Status','Borrower','Due Date','Actions'].map(header => <th key={header} className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider md:text-sm">{header}</th>)}</tr></thead>
           <tbody className="divide-y divide-gray-200 bg-white">{visibleBooks.map(book => {
             const archived = book.status === 'Archived';
             const checkedOut = book.status === 'Checked Out';
             return <tr key={book.bookId} className={archived ? 'bg-gray-100 text-gray-500' : 'hover:bg-gray-50'}>
+              <td className="px-3 py-4 text-center">
+                <input type="checkbox" checked={selectedBookIds.includes(book.bookId)} onChange={() => toggleSelectedBook(book.bookId)} disabled={archived} aria-label={`Select ${book.title} (${book.bookId}) for label printing`} className="h-6 w-6 accent-green-700 disabled:opacity-40" />
+              </td>
               <td className="whitespace-nowrap px-3 py-4 text-sm font-mono">{book.bookId}</td>
               <td className="whitespace-nowrap px-3 py-4 text-sm">{book.barcode ? <Barcode value={book.barcode} className="h-14" /> : '—'}</td>
               <td className="whitespace-nowrap px-3 py-4 text-sm font-semibold">{book.title}</td>
