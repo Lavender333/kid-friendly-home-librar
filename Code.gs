@@ -3,7 +3,7 @@ const TAB_LIBRARY = 'LIBRARY';
 const TAB_LOG = 'CHECKOUT LOG';
 const TAB_BORROWERS = 'BORROWERS';
 const SPREADSHEET_ID = '1rRO12mPbnNFE12G3c3hL_VlbHsrUSQeO';
-const BACKEND_VERSION = '10';
+const BACKEND_VERSION = '11';
 
 const LIB_HEADERS = ['Barcode','Book ID','Title','Author','Publisher','Publication Year','Genre','Status','Borrower','Checkout Date','Due Date','Notes'];
 const LOG_HEADERS = ['Checkout Date','Book ID','Title','Borrower','Action','Due Date','Return Date','Days Late','Notes'];
@@ -44,7 +44,17 @@ function doGet(e) {
     const lastRow = sheet.getLastRow(), lastColumn = sheet.getLastColumn();
     const headers = lastColumn ? sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0] : [];
     let data = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, lastColumn).getDisplayValues() : [];
-    if (e.parameter.tab === TAB_LIBRARY) data = data.filter(row => String(row[COL_BOOK_ID] || '').trim());
+    if (e.parameter.tab === TAB_LIBRARY) {
+      data.forEach((row, index) => {
+        const borrower = String(row[COL_BORROWER] || '').trim();
+        const status = String(row[COL_STATUS] || '').trim();
+        if (borrower && status !== 'Checked Out') {
+          row[COL_STATUS] = 'Checked Out';
+          lib.getRange(index + 2, COL_STATUS + 1).setValue('Checked Out');
+        }
+      });
+      data = data.filter(row => String(row[COL_BOOK_ID] || '').trim());
+    }
     return json_({ success: true, headers, data });
   } catch (error) { return json_({ success: false, message: `Error: ${error.message}` }); }
 }
@@ -128,7 +138,8 @@ function handleMutation(request) {
       if (row === -1) return json_({ success: false, message: `Book ID not found: ${bookId}` });
       const title = String(lib.getRange(row, COL_TITLE + 1).getDisplayValue()).trim();
       const status = String(lib.getRange(row, COL_STATUS + 1).getDisplayValue()).trim() || 'On Shelf';
-      if (status === 'Checked Out') return json_({ success: false, message: `Check in '${title}' before deleting it.` });
+      const borrower = String(lib.getRange(row, COL_BORROWER + 1).getDisplayValue()).trim();
+      if (status === 'Checked Out' || borrower) return json_({ success: false, message: `Check in '${title}' before deleting it.` });
       appendLog_(log, new Date(), bookId, title, '', 'Deleted', '', '', '', 'Library record deleted; prior checkout history retained');
       lib.deleteRow(row);
       return json_({ success: true, message: `Deleted '${title}'. Checkout history was kept.` });
@@ -138,7 +149,8 @@ function handleMutation(request) {
       const bookId = String(request.bookId || '').trim(), row = findBookRow_(lib, bookId);
       if (row === -1) return json_({ success: false, message: `Book ID not found: ${bookId}` });
       const title = String(lib.getRange(row, COL_TITLE + 1).getDisplayValue()).trim();
-      const currentStatus = String(lib.getRange(row, COL_STATUS + 1).getDisplayValue()).trim() || 'On Shelf';
+      const currentBorrower = String(lib.getRange(row, COL_BORROWER + 1).getDisplayValue()).trim();
+      const currentStatus = currentBorrower ? 'Checked Out' : (String(lib.getRange(row, COL_STATUS + 1).getDisplayValue()).trim() || 'On Shelf');
       const newStatus = action === 'archiveBook' ? (request.archived === false ? 'On Shelf' : 'Archived') : String(request.status || '').trim();
       if (!['On Shelf','Missing','Repair','Archived'].includes(newStatus)) return json_({ success: false, message: 'Use Scan Station to check out a book.' });
       if (newStatus === 'Archived' && currentStatus === 'Checked Out') return json_({ success: false, message: `Check in '${title}' before archiving it.` });
@@ -155,7 +167,10 @@ function handleMutation(request) {
     if (row === -1) return json_({ success: false, message: `Book ID not found: ${scannedId}` });
     const bookId = String(lib.getRange(row, COL_BOOK_ID + 1).getDisplayValue()).trim(), title = String(lib.getRange(row, COL_TITLE + 1).getDisplayValue()).trim();
     const statusCell = lib.getRange(row, COL_STATUS + 1), borrowerCell = lib.getRange(row, COL_BORROWER + 1), checkoutCell = lib.getRange(row, COL_CHECKOUT + 1), dueCell = lib.getRange(row, COL_DUE + 1);
-    const status = String(statusCell.getDisplayValue()).trim() || 'On Shelf', now = new Date();
+    const assignedBorrower = String(borrowerCell.getDisplayValue()).trim();
+    let status = String(statusCell.getDisplayValue()).trim() || 'On Shelf';
+    if (assignedBorrower && status !== 'Checked Out') { status = 'Checked Out'; statusCell.setValue(status); }
+    const now = new Date();
 
     if (operation === 'checkout') {
       if (status !== 'On Shelf') return json_({ success: false, message: `'${title}' is unavailable (${status}).` });
@@ -167,7 +182,7 @@ function handleMutation(request) {
     }
 
     if (status !== 'Checked Out') return json_({ success: false, message: `'${title}' is not checked out (status: ${status}).` });
-    const transactionBorrower = String(borrowerCell.getDisplayValue()).trim() || borrower, checkoutDate = checkoutCell.getValue(), dueDate = dueCell.getValue();
+    const transactionBorrower = assignedBorrower || borrower, checkoutDate = checkoutCell.getValue(), dueDate = dueCell.getValue();
     const daysLate = dueDate instanceof Date && !isNaN(dueDate) ? Math.max(0, Math.ceil((now.getTime() - dueDate.getTime()) / 86400000)) : 0;
     statusCell.setValue('On Shelf'); borrowerCell.clearContent(); checkoutCell.clearContent(); dueCell.clearContent();
     appendLog_(log, checkoutDate, bookId, title, transactionBorrower, 'Return', dueDate, now, daysLate, daysLate > 0 ? `${daysLate} day${daysLate === 1 ? '' : 's'} late` : 'On time');

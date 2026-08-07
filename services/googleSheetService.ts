@@ -81,6 +81,7 @@ export class SheetService {
     return data.map(row => {
       const obj: Record<string, string> = {};
       headers.forEach((header, index) => { if (header.trim()) obj[this.toCamelCase(header)] = row[index] ?? ''; });
+      if (tab === 'LIBRARY' && obj.borrower?.trim()) obj.status = 'Checked Out';
       return obj as T;
     });
   }
