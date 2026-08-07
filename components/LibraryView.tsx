@@ -104,9 +104,52 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
     window.setTimeout(() => window.print(), 100);
   };
   const printReceipt = (book: Book) => {
+    // Open the print window directly from the button click so Safari/iPad does
+    // not treat the print action as a delayed popup. The receipt is rendered
+    // synchronously, copied into its own 4 x 6 document, and printed there.
+    const printWindow = window.open('', '_blank', 'width=520,height=760');
     flushSync(() => setReceiptBook(book));
-    document.body.dataset.libraryPrintTarget = 'receipt';
-    window.print();
+
+    const receipt = document.querySelector<HTMLElement>('.library-book-receipt');
+    if (!printWindow || !receipt) {
+      document.body.dataset.libraryPrintTarget = 'receipt';
+      window.print();
+      return;
+    }
+
+    delete document.body.dataset.libraryPrintTarget;
+    const receiptMarkup = receipt.outerHTML;
+    printWindow.document.open();
+    printWindow.document.write(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mariah's Library Receipt</title>
+  <style>
+    @page { size: 4in 6in; margin: 0; }
+    html, body { margin: 0; padding: 0; background: #fff; color: #000; }
+    body { width: 4in; min-height: 6in; font-family: Arial, sans-serif; }
+    .thermal-receipt { display: block !important; box-sizing: border-box; width: 4in; min-height: 6in; padding: .35in; color: #000; background: #fff; font-family: Arial, sans-serif; font-size: 15pt; line-height: 1.35; }
+    .thermal-receipt h1 { margin: 0; text-align: center; font-size: 25pt; }
+    .thermal-receipt h2 { text-align: center; font-size: 20pt; }
+    .receipt-rule { margin: .2in 0; border-top: 3px solid #000; }
+    .receipt-thanks { margin-top: .35in; text-align: center; font-size: 18pt; font-weight: bold; }
+    svg { display: block; max-width: 100%; height: auto; margin-left: auto; margin-right: auto; }
+  </style>
+</head>
+<body>${receiptMarkup}</body>
+</html>`);
+    printWindow.document.close();
+
+    const runPrint = () => {
+      printWindow.focus();
+      printWindow.print();
+      window.setTimeout(() => setReceiptBook(null), 250);
+    };
+
+    if (printWindow.document.readyState === 'complete') window.setTimeout(runPrint, 50);
+    else printWindow.addEventListener('load', runPrint, { once: true });
   };
   const cricutPages = React.useMemo(() => {
     const pages: Book[][] = [];
