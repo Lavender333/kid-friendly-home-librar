@@ -107,16 +107,28 @@ const App: React.FC = () => {
     } finally { setIsLoading(false); }
   }, [sheetService, checkWebAppUrl, fetchLibraryData]);
 
-  const handleUpdateBookStatus = React.useCallback(async (bookId: string, status: string) => {
+  const handleUpdateBookStatus = React.useCallback(async (bookId: string, status: string, borrower = '', dueDays = 14) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
     setIsLoading(true);
     try {
-      const response = await sheetService.updateBookStatus(bookId, status);
+      const response = status === 'Checked Out'
+        ? await sheetService.scanBook(bookId, borrower, dueDays, 'checkout')
+        : await sheetService.updateBookStatus(bookId, status);
       setMessage({ text: response.message || (response.success ? 'Status updated.' : 'Status update failed.'), type: response.success ? 'success' : 'error' });
-      if (response.success) setLibraryData(current => { const updated = current.map(book => book.bookId === bookId ? { ...book, status, borrower: '', checkoutDate: '', dueDate: '' } : book); writeCache(LIBRARY_CACHE_KEY, updated); return updated; });
+      if (response.success) {
+        const checkoutResult = response as { timestamp?: string; dueDate?: string };
+        setLibraryData(current => {
+          const updated = current.map(book => book.bookId === bookId
+            ? { ...book, status, borrower: status === 'Checked Out' ? borrower : '', checkoutDate: status === 'Checked Out' ? (checkoutResult.timestamp || '') : '', dueDate: status === 'Checked Out' ? (checkoutResult.dueDate || '') : '' }
+            : book);
+          writeCache(LIBRARY_CACHE_KEY, updated);
+          return updated;
+        });
+        if (status === 'Checked Out') void fetchCheckoutLogData(true);
+      }
       return response;
     } finally { setIsLoading(false); }
-  }, [sheetService, checkWebAppUrl]);
+  }, [sheetService, checkWebAppUrl, fetchCheckoutLogData]);
 
   const handleEditBook = React.useCallback(async (bookId: string, book: Book) => {
     if (!checkWebAppUrl()) return { success: false, message: 'Configuration error.' };
@@ -201,7 +213,7 @@ const App: React.FC = () => {
         <div className="mt-6">
           <Routes>
             <Route path="/" element={<ScanStation onScan={handleScan} borrowers={borrowerNames} />} />
-            <Route path="/library" element={<LibraryView books={libraryData} isLoading={isLoading} onUpdateStatus={handleUpdateBookStatus} onEditBook={handleEditBook} onArchiveBook={handleArchiveBook} onDeleteBook={handleDeleteBook} />} />
+            <Route path="/library" element={<LibraryView books={libraryData} borrowers={borrowerNames} isLoading={isLoading} onUpdateStatus={handleUpdateBookStatus} onEditBook={handleEditBook} onArchiveBook={handleArchiveBook} onDeleteBook={handleDeleteBook} />} />
             <Route path="/add-book" element={<AddBookView onAddBook={handleAddBook} isLoading={isLoading} />} />
             <Route path="/checkout-log" element={<CheckoutLogView logEntries={logData} isLoading={isLoading} onCheckIn={handleCheckInFromLog} />} />
             <Route path="/manage-borrowers" element={<ManageBorrowersView borrowers={borrowersList} onAddBorrower={handleAddNewBorrower} onEditBorrower={handleEditBorrower} isLoading={isLoading} message={message} />} />
