@@ -7,8 +7,9 @@ import { CRICUT_LABELS_PER_PAGE, downloadCricutLabelPage } from '../services/cri
 
 interface LibraryViewProps {
   books: Book[];
+  borrowers: string[];
   isLoading: boolean;
-  onUpdateStatus: (bookId: string, status: string) => Promise<{ success: boolean; message?: string }>;
+  onUpdateStatus: (bookId: string, status: string, borrower?: string, dueDays?: number) => Promise<{ success: boolean; message?: string }>;
   onEditBook: (bookId: string, book: Book) => Promise<{ success: boolean; message?: string }>;
   onArchiveBook: (bookId: string, archived: boolean) => Promise<{ success: boolean; message?: string }>;
   onDeleteBook: (bookId: string) => Promise<{ success: boolean; message?: string }>;
@@ -19,7 +20,7 @@ const editableFields: Array<[keyof Book, string]> = [
   ['publicationYear', 'Publication Year'], ['genre', 'Genre'], ['notes', 'Notes'],
 ];
 
-const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateStatus, onEditBook, onArchiveBook, onDeleteBook }) => {
+const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, onUpdateStatus, onEditBook, onArchiveBook, onDeleteBook }) => {
   const [showArchived, setShowArchived] = React.useState(false);
   const [editingBook, setEditingBook] = React.useState<Book | null>(null);
   const [labelBooks, setLabelBooks] = React.useState<Book[]>([]);
@@ -27,8 +28,12 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
   const [selectedBookIds, setSelectedBookIds] = React.useState<string[]>([]);
   const [confirmArchiveId, setConfirmArchiveId] = React.useState('');
   const [confirmDeleteId, setConfirmDeleteId] = React.useState('');
+  const [checkoutBook, setCheckoutBook] = React.useState<Book | null>(null);
+  const [checkoutBorrower, setCheckoutBorrower] = React.useState('');
+  const [checkoutDueDays, setCheckoutDueDays] = React.useState(14);
   const [cricutMessage, setCricutMessage] = React.useState('');
   const editRef = React.useRef<HTMLFormElement>(null);
+  const checkoutRef = React.useRef<HTMLFormElement>(null);
   const labelRef = React.useRef<HTMLElement>(null);
   const archivedCount = books.filter(book => book.status === 'Archived').length;
   const activeBooks = books.filter(book => book.status !== 'Archived');
@@ -36,6 +41,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
   const selectedBooks = activeBooks.filter(book => selectedBookIds.includes(book.bookId));
 
   React.useEffect(() => { if (editingBook) window.setTimeout(() => editRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }, [editingBook]);
+  React.useEffect(() => { if (checkoutBook) window.setTimeout(() => checkoutRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }, [checkoutBook]);
   React.useEffect(() => { if (labelBooks.length) window.setTimeout(() => labelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }, [labelBooks]);
   React.useEffect(() => {
     const finishPrinting = () => {
@@ -72,6 +78,23 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
       setSelectedBookIds(current => current.filter(bookId => bookId !== book.bookId));
       if (editingBook?.bookId === book.bookId) setEditingBook(null);
     }
+  };
+
+  const chooseStatus = (book: Book, status: string) => {
+    if (status !== 'Checked Out') {
+      void onUpdateStatus(book.bookId, status);
+      return;
+    }
+    setCheckoutBook(book);
+    setCheckoutBorrower(book.borrower || borrowers[0] || '');
+    setCheckoutDueDays(14);
+  };
+
+  const confirmCheckout = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!checkoutBook || !checkoutBorrower.trim()) return;
+    const response = await onUpdateStatus(checkoutBook.bookId, 'Checked Out', checkoutBorrower.trim(), checkoutDueDays);
+    if (response.success) setCheckoutBook(null);
   };
 
   const openLabels = (selected: Book[]) => setLabelBooks(selected.filter(book => book.bookId && book.status !== 'Archived'));
@@ -186,6 +209,32 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
         </form>
       )}
 
+      {checkoutBook && (
+        <form ref={checkoutRef} onSubmit={confirmCheckout} className="mb-6 scroll-mt-28 rounded-xl border-2 border-blue-500 bg-blue-50 p-4 shadow-lg">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-xl font-bold">Check Out Book</h3>
+              <p className="text-sm text-gray-700">{checkoutBook.title}</p>
+            </div>
+            <button type="button" onClick={() => setCheckoutBook(null)} className="rounded-lg bg-gray-200 px-4 py-2 font-semibold">Cancel</button>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label>
+              <span className="mb-1 block font-semibold">Borrower *</span>
+              <input list="library-borrowers" value={checkoutBorrower} onChange={event => setCheckoutBorrower(event.target.value)} required autoFocus autoComplete="off" className="w-full rounded-lg border p-3" placeholder="Select or type borrower" />
+              <datalist id="library-borrowers">{borrowers.map(name => <option key={name} value={name} />)}</datalist>
+            </label>
+            <label>
+              <span className="mb-1 block font-semibold">Loan length</span>
+              <select value={checkoutDueDays} onChange={event => setCheckoutDueDays(Number(event.target.value))} className="w-full rounded-lg border bg-white p-3">
+                <option value={7}>7 days</option><option value={14}>14 days</option><option value={21}>21 days</option><option value={28}>28 days</option>
+              </select>
+            </label>
+          </div>
+          <button disabled={isLoading || !checkoutBorrower.trim()} className="mt-4 w-full rounded-lg bg-primary-green p-3 text-lg font-bold text-white disabled:opacity-50">{isLoading ? 'Checking Out…' : 'Confirm Checkout'}</button>
+        </form>
+      )}
+
       {visibleBooks.length === 0 ? <p className="text-center text-gray-500">{showArchived ? 'No books have been archived.' : 'No active books yet. Use Add Book to get started.'}</p> : (
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-primary-green text-white"><tr>{['Select','Book ID','Barcode','Title','Author','Status','Borrower','Due Date','Actions'].map(header => <th key={header} className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider md:text-sm">{header}</th>)}</tr></thead>
@@ -200,7 +249,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
               <td className="whitespace-nowrap px-3 py-4 text-sm">{book.barcode ? <Barcode value={book.barcode} className="h-14" /> : '—'}</td>
               <td className="whitespace-nowrap px-3 py-4 text-sm font-semibold">{book.title}</td>
               <td className="whitespace-nowrap px-3 py-4 text-sm">{book.author || '—'}</td>
-              <td className="whitespace-nowrap px-3 py-4 text-sm font-semibold">{archived ? <span className="rounded-full bg-gray-300 px-3 py-2">Archived</span> : <select value={book.status || 'On Shelf'} onChange={event => void onUpdateStatus(book.bookId, event.target.value)} disabled={isLoading} className="min-h-11 rounded-lg border bg-white px-3 py-2 text-text-dark"><option>On Shelf</option><option>Missing</option><option>Repair</option></select>}</td>
+              <td className="whitespace-nowrap px-3 py-4 text-sm font-semibold">{archived ? <span className="rounded-full bg-gray-300 px-3 py-2">Archived</span> : <select value={book.status || 'On Shelf'} onChange={event => chooseStatus(book, event.target.value)} disabled={isLoading} className="min-h-11 rounded-lg border bg-white px-3 py-2 text-text-dark"><option>On Shelf</option><option>Checked Out</option><option>Missing</option><option>Repair</option></select>}</td>
               <td className="whitespace-nowrap px-3 py-4 text-sm">{book.borrower || '—'}</td>
               <td className="whitespace-nowrap px-3 py-4 text-sm">{book.dueDate || '—'}</td>
               <td className="min-w-72 px-3 py-3 text-sm">
