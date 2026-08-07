@@ -22,6 +22,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
   const [showArchived, setShowArchived] = React.useState(false);
   const [editingBook, setEditingBook] = React.useState<Book | null>(null);
   const [labelBooks, setLabelBooks] = React.useState<Book[]>([]);
+  const [receiptBook, setReceiptBook] = React.useState<Book | null>(null);
   const [selectedBookIds, setSelectedBookIds] = React.useState<string[]>([]);
   const [confirmArchiveId, setConfirmArchiveId] = React.useState('');
   const [confirmDeleteId, setConfirmDeleteId] = React.useState('');
@@ -35,6 +36,17 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
 
   React.useEffect(() => { if (editingBook) window.setTimeout(() => editRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }, [editingBook]);
   React.useEffect(() => { if (labelBooks.length) window.setTimeout(() => labelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); }, [labelBooks]);
+  React.useEffect(() => {
+    const finishPrinting = () => {
+      delete document.body.dataset.libraryPrintTarget;
+      setReceiptBook(null);
+    };
+    window.addEventListener('afterprint', finishPrinting);
+    return () => {
+      window.removeEventListener('afterprint', finishPrinting);
+      delete document.body.dataset.libraryPrintTarget;
+    };
+  }, []);
 
   const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -63,7 +75,15 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
 
   const openLabels = (selected: Book[]) => setLabelBooks(selected.filter(book => book.bookId && book.status !== 'Archived'));
   const toggleSelectedBook = (bookId: string) => setSelectedBookIds(current => current.includes(bookId) ? current.filter(id => id !== bookId) : [...current, bookId]);
-  const printLabels = () => window.setTimeout(() => window.print(), 100);
+  const printLabels = () => {
+    document.body.dataset.libraryPrintTarget = 'labels';
+    window.setTimeout(() => window.print(), 100);
+  };
+  const printReceipt = (book: Book) => {
+    setReceiptBook(book);
+    document.body.dataset.libraryPrintTarget = 'receipt';
+    window.setTimeout(() => window.print(), 100);
+  };
   const cricutPages = React.useMemo(() => {
     const pages: Book[][] = [];
     for (let index = 0; index < labelBooks.length; index += CRICUT_LABELS_PER_PAGE) pages.push(labelBooks.slice(index, index + CRICUT_LABELS_PER_PAGE));
@@ -194,6 +214,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
                   </div>
                 ) : archived ? (
                   <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => printReceipt(book)} className="min-h-11 rounded-lg bg-secondary-blue px-3 font-bold text-text-dark">Print Receipt</button>
                     <button type="button" onClick={() => void onArchiveBook(book.bookId, false)} disabled={isLoading} className="min-h-11 rounded-lg bg-primary-green px-4 font-bold text-white">Restore</button>
                     <button type="button" onClick={() => setConfirmDeleteId(book.bookId)} className="min-h-11 rounded-lg bg-error-red px-3 font-bold text-white">Delete</button>
                   </div>
@@ -202,6 +223,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => openLabels([book])} className="min-h-11 rounded-lg bg-accent-yellow px-3 font-bold text-text-dark">Print Label</button>
+                    <button type="button" onClick={() => printReceipt(book)} className="min-h-11 rounded-lg bg-secondary-blue px-3 font-bold text-text-dark">Print Receipt</button>
                     <button type="button" onClick={() => setEditingBook({ ...book })} disabled={isLoading} className="min-h-11 rounded-lg bg-secondary-blue px-3 font-bold">Edit</button>
                     <button type="button" onClick={() => setConfirmArchiveId(book.bookId)} disabled={isLoading || checkedOut} className="min-h-11 rounded-lg bg-gray-200 px-3 font-bold disabled:opacity-40">Archive</button>
                     <button type="button" onClick={() => setConfirmDeleteId(book.bookId)} disabled={isLoading || checkedOut} className="min-h-11 rounded-lg bg-error-red px-3 font-bold text-white disabled:opacity-40">Delete</button>
@@ -211,6 +233,22 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
             </tr>;
           })}</tbody>
         </table>
+      )}
+
+      {receiptBook && (
+        <section className="thermal-receipt library-book-receipt" aria-label={`Book receipt for ${receiptBook.title}`}>
+          <h1>Mariah&apos;s Library</h1>
+          <div className="receipt-rule" />
+          <h2>Book Receipt</h2>
+          <p style={{ textAlign: 'center', fontWeight: 'bold' }}>{receiptBook.title}</p>
+          {receiptBook.author && <p style={{ textAlign: 'center' }}>by {receiptBook.author}</p>}
+          <p><strong>Book ID:</strong> {receiptBook.bookId}</p>
+          <p><strong>Status:</strong> {receiptBook.status || 'On Shelf'}</p>
+          {receiptBook.borrower && <p><strong>Borrower:</strong> {receiptBook.borrower}</p>}
+          {receiptBook.dueDate && <p><strong>Due:</strong> {receiptBook.dueDate}</p>}
+          <Barcode value={receiptBook.barcode || receiptBook.bookId} className="mx-auto max-w-full" height={85} width={2.5} />
+          <p className="receipt-thanks">Read, Share, Grow!</p>
+        </section>
       )}
 
       {isLoading && books.length > 0 && !editingBook && <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-white/75"><LoadingSpinner /></div>}

@@ -22,6 +22,16 @@
 .book-label-id { margin: 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; font-weight: 800; }
 
 @media print {
+  body[data-library-print-target="receipt"] .printable-book-labels {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  body[data-library-print-target="labels"] .library-book-receipt {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
   .printable-book-labels,
   .printable-book-labels * {
     visibility: visible !important;
