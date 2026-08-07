@@ -1,4 +1,5 @@
 import React from 'react';
+import { flushSync } from 'react-dom';
 import { Book } from '../types';
 import LoadingSpinner from './LoadingSpinner';
 import Barcode from './Barcode';
@@ -80,9 +81,9 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, isLoading, onUpdateSta
     window.setTimeout(() => window.print(), 100);
   };
   const printReceipt = (book: Book) => {
-    setReceiptBook(book);
+    flushSync(() => setReceiptBook(book));
     document.body.dataset.libraryPrintTarget = 'receipt';
-    window.setTimeout(() => window.print(), 100);
+    window.print();
   };
   const cricutPages = React.useMemo(() => {
     const pages: Book[][] = [];
