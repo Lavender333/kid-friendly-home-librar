@@ -20,42 +20,61 @@ export class SheetService {
     }
   }
 
+  private async fetchMutation(url: string, init: RequestInit = {}, timeoutMs = 15000): Promise<Response> {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(url, {
+        ...init,
+        cache: 'no-store',
+        redirect: 'follow',
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if ((error as DOMException).name === 'AbortError') throw new Error('The Library backend did not respond. Please try again.');
+      throw error;
+    } finally {
+      window.clearTimeout(timer);
+    }
+  }
+
   private async sendMutation<T>(payload: object): Promise<T> {
-    const response = await fetch(this.webAppUrl, {
+    const response = await this.fetchMutation(this.webAppUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
       body: JSON.stringify(payload),
-      cache: 'no-store',
-      redirect: 'follow',
     });
     return this.readJson<T>(response);
   }
 
   private async sendMutationByGet<T>(payload: object): Promise<T> {
     const separator = this.webAppUrl.includes('?') ? '&' : '?';
-    const response = await fetch(`${this.webAppUrl}${separator}request=${encodeURIComponent(JSON.stringify(payload))}&_=${Date.now()}`, {
-      cache: 'no-store',
-      redirect: 'follow',
-    });
+    const response = await this.fetchMutation(`${this.webAppUrl}${separator}request=${encodeURIComponent(JSON.stringify(payload))}&_=${Date.now()}`);
     return this.readJson<T>(response);
   }
 
+  private isCompatibilityFailure(message: string): boolean {
+    return /invalid tab|invalid|unknown|unsupported|borrower.*required|choose check out|book id is required|script function not found/i.test(message);
+  }
+
   private async mutateWithFallback<T extends MutationResult>(payload: object, actionLabel: string): Promise<T> {
-    let postError: Error | null = null;
+    let getError: Error | null = null;
+
+    // The deployed Apps Script supports mutations through doGet(request=...).
+    // GET is the most reliable path in Safari/iPad because it avoids POST/CORS
+    // edge cases. Keep POST as a compatibility fallback for older deployments.
     try {
-      const result = await this.sendMutation<T>(payload);
-      if (result.success) return result;
-      const message = result.message || '';
-      if (!/invalid|unknown|unsupported|borrower.*required|choose check out|book id is required/i.test(message)) return result;
+      const result = await this.sendMutationByGet<T>(payload);
+      if (result.success || !this.isCompatibilityFailure(result.message || '')) return result;
     } catch (error) {
-      postError = error instanceof Error ? error : new Error(String(error));
+      getError = error instanceof Error ? error : new Error(String(error));
     }
 
     try {
-      return await this.sendMutationByGet<T>(payload);
-    } catch (getError) {
-      const detail = getError instanceof Error ? getError.message : String(getError);
-      throw new Error(`${actionLabel} failed. ${detail || postError?.message || ''}`.trim());
+      return await this.sendMutation<T>(payload);
+    } catch (postError) {
+      const detail = postError instanceof Error ? postError.message : String(postError);
+      throw new Error(`${actionLabel} failed. ${detail || getError?.message || ''}`.trim());
     }
   }
 
@@ -139,20 +158,29 @@ export class SheetService {
   }
 
   async updateBookStatus(bookId: string, status: string) {
-    try { return await this.mutateWithFallback<MutationResult>({ action: 'updateBookStatus', bookId, status }, 'Status update'); }
-    catch (error) { return { success: false, message: `Failed to update status: ${(error as Error).message}` }; }
+    try {
+      const result = await this.mutateWithFallback<MutationResult>({ action: 'updateBookStatus', bookId, status }, 'Status update');
+      if (result.success) this.readCache.delete('LIBRARY');
+      return result;
+    } catch (error) { return { success: false, message: `Failed to update status: ${(error as Error).message}` }; }
   }
 
   async updateBook(bookId: string, book: Book) {
-    try { return await this.mutateWithFallback<MutationResult>({ action: 'updateBook', bookId, book }, 'Edit book'); }
-    catch (error) { return { success: false, message: `Failed to edit book: ${(error as Error).message}` }; }
+    try {
+      const result = await this.mutateWithFallback<MutationResult>({ action: 'updateBook', bookId, book }, 'Edit book');
+      if (result.success) this.readCache.delete('LIBRARY');
+      if (!result.success && this.isCompatibilityFailure(result.message || '')) {
+        return { success: false, message: 'Save is not available in the deployed Apps Script version. Redeploy the current Code.gs as a new Web App version.' };
+      }
+      return result;
+    } catch (error) { return { success: false, message: `Failed to edit book: ${(error as Error).message}` }; }
   }
 
   async archiveBook(bookId: string, archived: boolean) {
     try {
       const result = await this.mutateWithFallback<MutationResult>({ action: 'archiveBook', bookId, archived }, archived ? 'Archive book' : 'Restore book');
       if (result.success) this.readCache.delete('LIBRARY');
-      if (!result.success && /invalid|unknown|unsupported/i.test(result.message || '')) {
+      if (!result.success && this.isCompatibilityFailure(result.message || '')) {
         return { success: false, message: 'Archive is not available in the deployed Apps Script version. Redeploy the current Code.gs as a new Web App version.' };
       }
       return result;
@@ -163,7 +191,7 @@ export class SheetService {
     try {
       const result = await this.mutateWithFallback<MutationResult>({ action: 'deleteBook', bookId }, 'Delete book');
       if (result.success) this.readCache.delete('LIBRARY');
-      if (!result.success && /invalid|unknown|unsupported|choose check out|borrower.*required/i.test(result.message || '')) {
+      if (!result.success && this.isCompatibilityFailure(result.message || '')) {
         return { success: false, message: 'Delete is not available in the deployed Apps Script version. Redeploy the current Code.gs as a new Web App version.' };
       }
       return result;
