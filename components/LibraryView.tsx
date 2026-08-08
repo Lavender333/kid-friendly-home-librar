@@ -32,6 +32,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
   const [checkoutBorrower, setCheckoutBorrower] = React.useState('');
   const [checkoutDueDays, setCheckoutDueDays] = React.useState(14);
   const [cricutMessage, setCricutMessage] = React.useState('');
+  const [actionMessage, setActionMessage] = React.useState('');
   const editRef = React.useRef<HTMLFormElement>(null);
   const checkoutRef = React.useRef<HTMLFormElement>(null);
   const labelRef = React.useRef<HTMLElement>(null);
@@ -57,21 +58,39 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
 
   const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!editingBook) return;
+    if (!editingBook || isLoading) return;
+    setActionMessage('Saving changes…');
     const response = await onEditBook(editingBook.bookId, editingBook);
-    if (response.success) setEditingBook(null);
+    setActionMessage(response.message || (response.success ? 'Changes saved.' : 'Could not save changes.'));
+    if (response.success) {
+      setEditingBook(null);
+      setConfirmDeleteId('');
+    }
   };
 
   const archive = async (book: Book) => {
+    if (isLoading) return;
+    setActionMessage(`Archiving ${book.title}…`);
     const response = await onArchiveBook(book.bookId, true);
+    setActionMessage(response.message || (response.success ? 'Book archived.' : 'Could not archive book.'));
     if (response.success) {
       setConfirmArchiveId('');
       setSelectedBookIds(current => current.filter(bookId => bookId !== book.bookId));
     }
   };
 
+  const restore = async (book: Book) => {
+    if (isLoading) return;
+    setActionMessage(`Restoring ${book.title}…`);
+    const response = await onArchiveBook(book.bookId, false);
+    setActionMessage(response.message || (response.success ? 'Book restored.' : 'Could not restore book.'));
+  };
+
   const deleteBook = async (book: Book) => {
+    if (isLoading || book.status === 'Checked Out') return;
+    setActionMessage(`Deleting ${book.title}…`);
     const response = await onDeleteBook(book.bookId);
+    setActionMessage(response.message || (response.success ? 'Book deleted.' : 'Could not delete book.'));
     if (response.success) {
       setConfirmDeleteId('');
       setLabelBooks(current => current.filter(item => item.bookId !== book.bookId));
@@ -104,9 +123,6 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
     window.setTimeout(() => window.print(), 100);
   };
   const printReceipt = (book: Book) => {
-    // Open the print window directly from the button click so Safari/iPad does
-    // not treat the print action as a delayed popup. The receipt is rendered
-    // synchronously, copied into its own 4 x 6 document, and printed there.
     const printWindow = window.open('', '_blank', 'width=520,height=760');
     flushSync(() => setReceiptBook(book));
 
@@ -185,6 +201,8 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
         </div>
       </div>
 
+      {actionMessage && <p className="mb-4 rounded-lg bg-gray-100 px-4 py-3 text-center font-semibold text-text-dark" aria-live="polite">{actionMessage}</p>}
+
       {labelBooks.length > 0 && (
         <section ref={labelRef} className="mb-6 scroll-mt-28 rounded-xl border-2 border-accent-yellow bg-yellow-50 p-4 shadow-lg">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -232,7 +250,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
         <form ref={editRef} onSubmit={saveEdit} className="mb-6 scroll-mt-28 rounded-xl border-2 border-secondary-blue bg-blue-50 p-4 shadow-lg">
           <div className="mb-4 flex items-center justify-between gap-3">
             <div><h3 className="text-xl font-bold">Edit Book</h3><p className="font-mono text-sm text-gray-600">Book ID: {editingBook.bookId}</p></div>
-            <button type="button" onClick={() => setEditingBook(null)} className="rounded-lg bg-gray-200 px-4 py-2 font-semibold">Cancel</button>
+            <button type="button" onClick={() => { setEditingBook(null); setConfirmDeleteId(''); }} className="rounded-lg bg-gray-200 px-4 py-2 font-semibold">Cancel</button>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             {editableFields.map(([field, label]) => (
@@ -245,10 +263,20 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
             ))}
           </div>
           <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <button disabled={isLoading} className="rounded-lg bg-primary-green p-3 font-bold text-white disabled:opacity-50">{isLoading ? 'Saving…' : 'Save Changes'}</button>
+            <button type="submit" disabled={isLoading} className="rounded-lg bg-primary-green p-3 font-bold text-white disabled:opacity-50">{isLoading ? 'Saving…' : 'Save Changes'}</button>
             <button type="button" onClick={() => openLabels([editingBook])} className="rounded-lg bg-accent-yellow p-3 font-bold">Print Small Label</button>
             <button type="button" onClick={() => setConfirmDeleteId(editingBook.bookId)} disabled={isLoading || editingBook.status === 'Checked Out'} className="rounded-lg bg-error-red p-3 font-bold text-white disabled:opacity-40">Delete Book</button>
           </div>
+          {confirmDeleteId === editingBook.bookId && (
+            <div className="mt-4 rounded-lg border-2 border-error-red bg-red-50 p-4">
+              <p className="font-bold">Delete {editingBook.title}?</p>
+              <p className="mb-3 text-sm">This removes the book from Library. Its prior checkout history remains.</p>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" onClick={() => void deleteBook(editingBook)} disabled={isLoading || editingBook.status === 'Checked Out'} className="rounded-lg bg-error-red px-4 py-2 font-bold text-white disabled:opacity-40">{isLoading ? 'Deleting…' : 'Yes, Delete'}</button>
+                <button type="button" onClick={() => setConfirmDeleteId('')} disabled={isLoading} className="rounded-lg bg-gray-200 px-4 py-2 font-semibold">Cancel</button>
+              </div>
+            </div>
+          )}
         </form>
       )}
 
@@ -274,7 +302,7 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
               </select>
             </label>
           </div>
-          <button disabled={isLoading || !checkoutBorrower.trim()} className="mt-4 w-full rounded-lg bg-primary-green p-3 text-lg font-bold text-white disabled:opacity-50">{isLoading ? 'Checking Out…' : 'Confirm Checkout'}</button>
+          <button type="submit" disabled={isLoading || !checkoutBorrower.trim()} className="mt-4 w-full rounded-lg bg-primary-green p-3 text-lg font-bold text-white disabled:opacity-50">{isLoading ? 'Checking Out…' : 'Confirm Checkout'}</button>
         </form>
       )}
 
@@ -296,30 +324,30 @@ const LibraryView: React.FC<LibraryViewProps> = ({ books, borrowers, isLoading, 
               <td className="whitespace-nowrap px-3 py-4 text-sm">{book.borrower || '—'}</td>
               <td className="whitespace-nowrap px-3 py-4 text-sm">{book.dueDate || '—'}</td>
               <td className="min-w-72 px-3 py-3 text-sm">
-                {confirmDeleteId === book.bookId ? (
+                {confirmDeleteId === book.bookId && editingBook?.bookId !== book.bookId ? (
                   <div className="rounded-lg border-2 border-error-red bg-red-50 p-3">
                     <p className="font-bold">Delete {book.title}?</p>
                     <p className="mb-3 text-xs">This removes the book from Library. Its prior checkout history remains.</p>
                     <div className="flex gap-2">
-                      <button type="button" onClick={() => void deleteBook(book)} disabled={isLoading || checkedOut} className="rounded-lg bg-error-red px-3 py-2 font-bold text-white disabled:opacity-40">Yes, Delete</button>
-                      <button type="button" onClick={() => setConfirmDeleteId('')} className="rounded-lg bg-gray-200 px-3 py-2">Cancel</button>
+                      <button type="button" onClick={() => void deleteBook(book)} disabled={isLoading || checkedOut} className="rounded-lg bg-error-red px-3 py-2 font-bold text-white disabled:opacity-40">{isLoading ? 'Deleting…' : 'Yes, Delete'}</button>
+                      <button type="button" onClick={() => setConfirmDeleteId('')} disabled={isLoading} className="rounded-lg bg-gray-200 px-3 py-2">Cancel</button>
                     </div>
                   </div>
                 ) : archived ? (
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => printReceipt(book)} className="min-h-11 rounded-lg bg-secondary-blue px-3 font-bold text-text-dark">Print Receipt</button>
-                    <button type="button" onClick={() => void onArchiveBook(book.bookId, false)} disabled={isLoading} className="min-h-11 rounded-lg bg-primary-green px-4 font-bold text-white">Restore</button>
-                    <button type="button" onClick={() => setConfirmDeleteId(book.bookId)} className="min-h-11 rounded-lg bg-error-red px-3 font-bold text-white">Delete</button>
+                    <button type="button" onClick={() => void restore(book)} disabled={isLoading} className="min-h-11 rounded-lg bg-primary-green px-4 font-bold text-white disabled:opacity-40">{isLoading ? 'Working…' : 'Restore'}</button>
+                    <button type="button" onClick={() => setConfirmDeleteId(book.bookId)} disabled={isLoading} className="min-h-11 rounded-lg bg-error-red px-3 font-bold text-white disabled:opacity-40">Delete</button>
                   </div>
                 ) : confirmArchiveId === book.bookId ? (
-                  <div className="rounded-lg border bg-white p-2"><p className="mb-2 font-semibold">Archive this book?</p><div className="flex gap-2"><button type="button" onClick={() => void archive(book)} disabled={isLoading} className="rounded-lg bg-gray-700 px-3 py-2 font-bold text-white">Yes</button><button type="button" onClick={() => setConfirmArchiveId('')} className="rounded-lg bg-gray-200 px-3 py-2">Cancel</button></div></div>
+                  <div className="rounded-lg border bg-white p-2"><p className="mb-2 font-semibold">Archive this book?</p><div className="flex gap-2"><button type="button" onClick={() => void archive(book)} disabled={isLoading} className="rounded-lg bg-gray-700 px-3 py-2 font-bold text-white disabled:opacity-40">{isLoading ? 'Archiving…' : 'Yes, Archive'}</button><button type="button" onClick={() => setConfirmArchiveId('')} disabled={isLoading} className="rounded-lg bg-gray-200 px-3 py-2">Cancel</button></div></div>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     <button type="button" onClick={() => openLabels([book])} className="min-h-11 rounded-lg bg-accent-yellow px-3 font-bold text-text-dark">Print Label</button>
                     <button type="button" onClick={() => printReceipt(book)} className="min-h-11 rounded-lg bg-secondary-blue px-3 font-bold text-text-dark">Print Receipt</button>
-                    <button type="button" onClick={() => setEditingBook({ ...book })} disabled={isLoading} className="min-h-11 rounded-lg bg-secondary-blue px-3 font-bold">Edit</button>
-                    <button type="button" onClick={() => setConfirmArchiveId(book.bookId)} disabled={isLoading || checkedOut} className="min-h-11 rounded-lg bg-gray-200 px-3 font-bold disabled:opacity-40">Archive</button>
-                    <button type="button" onClick={() => setConfirmDeleteId(book.bookId)} disabled={isLoading || checkedOut} className="min-h-11 rounded-lg bg-error-red px-3 font-bold text-white disabled:opacity-40">Delete</button>
+                    <button type="button" onClick={() => { setEditingBook({ ...book }); setConfirmDeleteId(''); setConfirmArchiveId(''); }} disabled={isLoading} className="min-h-11 rounded-lg bg-secondary-blue px-3 font-bold disabled:opacity-40">Edit</button>
+                    <button type="button" onClick={() => { setConfirmArchiveId(book.bookId); setConfirmDeleteId(''); }} disabled={isLoading || checkedOut} title={checkedOut ? 'Check in this book before archiving it.' : undefined} className="min-h-11 rounded-lg bg-gray-200 px-3 font-bold disabled:opacity-40">Archive</button>
+                    <button type="button" onClick={() => { setConfirmDeleteId(book.bookId); setConfirmArchiveId(''); }} disabled={isLoading || checkedOut} title={checkedOut ? 'Check in this book before deleting it.' : undefined} className="min-h-11 rounded-lg bg-error-red px-3 font-bold text-white disabled:opacity-40">Delete</button>
                   </div>
                 )}
               </td>
